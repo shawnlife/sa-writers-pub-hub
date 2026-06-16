@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SA Writing Digest Generator</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22><text y=%2213%22 font-size=%2214%22>%F0%9F%87%BF%F0%9F%87%A6</text></svg>">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro Text','Helvetica Neue',Arial,sans-serif;color:#111;background:#fff}
+.outer{padding:1.5rem 2rem;max-width:680px;margin:0 auto}
+.header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:1rem}
+.header-text h1{font-size:23px;font-weight:600;color:#111;margin-bottom:10px;line-height:1.3;white-space:nowrap}
+.flag{width:38px;height:38px;border-radius:50%;flex-shrink:0;border:1.5px solid #eee;display:flex;align-items:center;justify-content:center;font-size:20px}
+.quick-links{display:flex;gap:8px;margin-bottom:1.25rem}
+.quick-link{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:10px;border:0.5px solid #e8e8e5;background:#fff;color:#111;text-decoration:none;font-size:13px;font-weight:400;transition:background .15s}
+.quick-link:hover{background:#f7f7f5}
+.quick-link svg{width:14px;height:14px;opacity:.5}
+.sheet-bar{display:flex;align-items:center;gap:8px;padding:9px 14px;background:#f7f7f5;border-radius:12px;margin-bottom:1.25rem;font-size:13px;border:0.5px solid #e8e8e5}
+.dot{width:8px;height:8px;border-radius:50%;background:#ccc;flex-shrink:0}
+.dot.ok{background:#22c55e}.dot.err{background:#ef4444}.dot.spin{background:#f59e0b;animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.sheet-lbl{color:#666;flex:1;font-size:12px}
+.refresh-btn{font-size:12px;padding:4px 10px;border-radius:8px;border:0.5px solid #ddd;background:#fff;color:#111;cursor:pointer;font-family:inherit}
+.refresh-btn:hover{background:#f5f5f5}
+.card{background:#f7f7f5;border:1px solid #e3e3e0;border-radius:14px;padding:1.25rem;margin-bottom:1rem}
+.help{border:1px solid #e3e3e0;border-radius:12px;margin-bottom:1.25rem;overflow:hidden;background:#f7f7f5}
+.help summary{padding:10px 14px;font-size:13px;font-weight:500;color:#111;cursor:pointer;list-style:none;display:flex;align-items:center;gap:6px}
+.help summary::-webkit-details-marker{display:none}
+.help summary:before{content:'▸';font-size:11px;color:#888;transition:transform .15s}
+.help[open] summary:before{transform:rotate(90deg)}
+.help-body{padding:0 14px 14px;font-size:13px;color:#444;line-height:1.6}
+.help-body h4{font-size:12px;font-weight:600;color:#111;margin:.85rem 0 .25rem;text-transform:uppercase;letter-spacing:.04em}
+.help-body h4:first-child{margin-top:0}
+.help-body ul{margin:.25rem 0 .25rem 1.1rem}
+.help-body li{margin-bottom:.25rem}
+.help-body p{margin-bottom:.4rem}
+.card-title{font-size:11px;font-weight:500;color:#888;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.75rem}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+.field{display:flex;flex-direction:column;gap:5px;flex:1;min-width:130px}
+label{font-size:13px;color:#555}
+select,input[type=date]{width:100%;font-family:inherit;border:0.5px solid #ddd;border-radius:8px;padding:7px 10px;font-size:13px;background:#fff;color:#111}
+select:focus,input[type=date]:focus{outline:none;border-color:#e11c47}
+.btn-primary{width:100%;padding:11px;font-size:15px;border-radius:12px;border:none;background:#e11c47;color:#fff;cursor:pointer;margin-top:4px;font-family:inherit;font-weight:500;transition:opacity .15s}
+.btn-primary:hover{opacity:.88}.btn-primary:disabled{opacity:.4;cursor:not-allowed}
+.btn-secondary{width:100%;padding:11px;font-size:15px;border-radius:12px;border:0.5px solid #e8e8e5;background:#fff;color:#111;cursor:pointer;margin-top:8px;font-family:inherit;font-weight:400;transition:background .15s}
+.btn-secondary:hover{background:#f7f7f5}.btn-secondary:disabled{opacity:.4;cursor:not-allowed}
+.btn-outline{flex:1;padding:10px;font-size:14px;border-radius:12px;border:2px solid #e11c47;background:#f7f7f5;color:#111;cursor:pointer;font-family:inherit;font-weight:500;transition:background .15s}
+.btn-outline:hover{background:#fde8ec}
+.bulk-rows{display:flex;flex-direction:column;gap:6px;margin-bottom:10px;padding-right:4px}
+.bulk-rows.scrollable{max-height:340px;overflow-y:auto}
+.bulk-row{display:grid;grid-template-columns:1fr 1.3fr 1fr 24px;gap:6px;align-items:center}
+.bulk-row input,.bulk-row select{width:100%;font-family:inherit;border:0.5px solid #ddd;border-radius:8px;padding:6px 8px;font-size:12px;background:#fff;color:#111}
+.bulk-remove{background:none;border:none;color:#aaa;cursor:pointer;font-size:17px;line-height:1;padding:0}
+.bulk-remove:hover{color:#e11c47}
+.status{font-size:13px;color:#666;padding:6px 0;min-height:22px}
+.status.err{color:#ef4444}.status.ok{color:#22c55e}
+.prog{height:3px;background:#f0f0ee;border-radius:2px;margin:6px 0;display:none;overflow:hidden}
+.prog-inner{height:100%;background:#e11c47;border-radius:2px;transition:width .2s}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:1rem 0}
+.stat{background:#f7f7f5;border-radius:12px;padding:12px;text-align:center}
+.stat-n{font-size:24px;font-weight:500;color:#111}
+.stat-l{font-size:12px;color:#888;margin-top:2px}
+.sec-title{font-size:16px;font-weight:500;color:#111;margin:1.25rem 0 .4rem}
+.sec-desc{font-size:13px;color:#666;margin-bottom:.75rem;line-height:1.5}
+.uncat-card{border:0.5px solid #e8e8e5;border-radius:14px;overflow:hidden;margin-bottom:.75rem;background:#fff}
+.uncat-hdr{padding:9px 14px;background:#f7f7f5;font-size:11px;font-weight:500;color:#888;text-transform:uppercase;letter-spacing:.06em;border-bottom:0.5px solid #e8e8e5}
+.uncat-row{display:grid;grid-template-columns:155px 1fr 175px;gap:10px;padding:10px 14px;border-bottom:0.5px solid #f0f0ee;align-items:start}
+.uncat-row:last-child{border-bottom:none}
+.uncat-name{font-size:13px;font-weight:500;color:#111;padding-top:2px}
+.uncat-arts a{display:block;font-size:12px;color:#888;text-decoration:none;margin-bottom:3px;line-height:1.4}
+.uncat-arts a:hover{color:#e11c47}
+.uncat-sel{display:flex;flex-direction:column;gap:5px}
+.uncat-sel select{font-size:12px;width:100%;border-radius:8px}
+.save-cat-btn{font-size:12px;padding:4px 10px;border-radius:8px;border:none;background:#e11c47;color:#fff;cursor:pointer;font-family:inherit;display:none;transition:opacity .15s}
+.save-cat-btn:hover{opacity:.85}
+.save-cat-btn.saved{background:#22c55e}
+.save-cat-btn:disabled{opacity:.5;cursor:not-allowed}
+.doc-link-wrap{margin-top:10px;display:none}
+.doc-link{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#e11c47;text-decoration:none;font-weight:500}
+.doc-link:hover{text-decoration:underline}
+.divider{height:0.5px;background:#f0f0ee;margin:1rem 0}
+.spinner{display:inline-block;width:12px;height:12px;border:2px solid #e8e8e5;border-top-color:#e11c47;border-radius:50%;animation:spin .7s linear infinite;margin-right:6px;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+.creating-msg{font-size:13px;color:#666;padding:8px 0;display:none}
+</style>
+</head>
+<body>
+<div class="outer">
+
+  <div class="header">
+    <div class="header-text">
+      <h1>Writing Digest Generator for SA Writers' Pub Hub</h1>
+      <div class="quick-links">
+        <a class="quick-link" href="https://docs.google.com/spreadsheets/d/11VMjloWhg9qJNfUMMTTAdLQkqt7DqoU8cvoBmxx1WEk/edit" target="_blank">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+          Writer &amp; article database
+        </a>
+        <a class="quick-link" href="https://docs.google.com/document/d/1c865BZua0CQ1WkOCvoIgjLbn9Gx7MqrMQ_G4Kpm3mp4/edit" target="_blank">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          Digests
+        </a>
+      </div>
+    </div>
+    <div class="flag">🇿🇦</div>
+  </div>
+
+  <details class="help">
+    <summary>Introduction &amp; need help?</summary>
+    <div class="help-body">
+      <p>This tool replaces manually checking ~400 Substack writers' pages each digest. There's a database behind the scenes that gets populated every morning with whatever each writer has posted, so generating a digest here is nearly instant.</p>
+
+      <p style="color:#e11c47"><strong>⚠ Don't include today's date in your digest.</strong> The database only updates each morning with the previous day's articles, so today's posts won't be in there yet — only pick dates up to yesterday.</p>
+
+      <h4>Add / update a writer</h4>
+      <ul>
+        <li><strong>+ Add writer</strong> — add someone new with their name, Substack link, and category.</li>
+        <li><strong>Update writer</strong> — pick an existing writer to fix their name, link, or category. If you rename someone, their past articles are relinked automatically.</li>
+      </ul>
+
+      <h4>Generate a digest</h4>
+      <ul>
+        <li>Pick a date range and (optionally) a single category, then click <strong>Generate digest</strong>.</li>
+        <li>Any writer who published but has no category yet will show up in the <strong>Uncategorised writers</strong> panel — assign one and click <strong>Save to sheet</strong>. This updates both the writer list and the article database.</li>
+      </ul>
+
+      <h4>Creating the digest</h4>
+      <ul>
+        <li><strong>Create digest in Google Doc</strong> writes a formatted copy into the running Google Doc (handy as an archive/working copy).</li>
+        <li><strong>Copy digest for Substack</strong> copies a ready-to-paste version: writer names in bold, article titles as plain links, category photos with credits where available. Paste it straight into a new Substack post.</li>
+      </ul>
+    </div>
+  </details>
+
+  <div class="sheet-bar">
+    <div class="dot spin" id="dot"></div>
+    <span class="sheet-lbl" id="sheet-lbl">Loading writer list…</span>
+    <button class="refresh-btn" onclick="loadSheet()">↻ Refresh</button>
+  </div>
+
+  <div class="row" style="margin-bottom:1.25rem">
+    <button class="btn-outline" onclick="openWriterModal('add')">+ Add writer</button>
+    <button class="btn-outline" onclick="openWriterModal('update')">Update writer</button>
+  </div>
+
+  <div id="writer-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:50;align-items:center;justify-content:center;padding:1rem">
+    <div class="card" style="max-width:420px;width:100%;margin:0">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
+        <div class="card-title" id="writer-modal-title" style="margin-bottom:0">Add writer</div>
+        <a href="#" id="writer-modal-bulk-link" onclick="switchToBulkModal(); return false;" style="font-size:12px;color:#e11c47;text-decoration:none;font-weight:500">Need to add multiple?</a>
+      </div>
+      <div id="writer-modal-select-field" class="field" style="margin-bottom:10px;display:none">
+        <label>Writer</label>
+        <select id="writer-modal-select" onchange="onWriterModalSelect()"></select>
+      </div>
+      <div class="field" style="margin-bottom:10px">
+        <label>Name</label>
+        <input type="text" id="writer-modal-name" style="width:100%;font-family:inherit;border:0.5px solid #ddd;border-radius:8px;padding:7px 10px;font-size:13px">
+      </div>
+      <div class="field" style="margin-bottom:10px">
+        <label>Substack link</label>
+        <input type="text" id="writer-modal-link" style="width:100%;font-family:inherit;border:0.5px solid #ddd;border-radius:8px;padding:7px 10px;font-size:13px">
+      </div>
+      <div class="field" style="margin-bottom:10px">
+        <label>Category</label>
+        <select id="writer-modal-category"><option value="">— uncategorised —</option></select>
+      </div>
+      <div class="status" id="writer-modal-status"></div>
+      <button class="btn-primary" id="writer-modal-save" onclick="saveWriterModal()">Save</button>
+      <button class="btn-secondary" onclick="closeWriterModal()">Cancel</button>
+    </div>
+  </div>
+
+  <div id="bulk-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:50;align-items:center;justify-content:center;padding:1rem">
+    <div class="card" style="max-width:560px;width:100%;margin:0">
+      <div class="card-title">Add multiple writers</div>
+      <div class="bulk-row" style="margin-bottom:6px">
+        <label style="font-size:11px;color:#888">Name</label>
+        <label style="font-size:11px;color:#888">Substack link</label>
+        <label style="font-size:11px;color:#888">Category</label>
+        <span></span>
+      </div>
+      <div class="bulk-rows" id="bulk-rows"></div>
+      <button class="btn-secondary" id="bulk-add-row-btn" style="margin-top:0" onclick="addBulkRow()">+ Add another row</button>
+      <div class="status" id="bulk-modal-status"></div>
+      <button class="btn-primary" onclick="saveBulkModal()">Save all</button>
+      <button class="btn-secondary" onclick="closeBulkModal()">Cancel</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Date range</div>
+    <div class="row">
+      <div class="field"><label>From</label><input type="date" id="d-from"/></div>
+      <div class="field"><label>To</label><input type="date" id="d-to"/></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Digest type</div>
+    <div class="field">
+      <label>Generate</label>
+      <select id="cat-filter"><option value="__all__">Full digest — all categories</option></select>
+    </div>
+  </div>
+
+  <button class="btn-primary" id="gen-btn" onclick="generate()" disabled>Generate digest</button>
+
+  <div class="status" id="status">Loading writer list…</div>
+  <div class="prog" id="prog"><div class="prog-inner" id="prog-inner" style="width:0%"></div></div>
+
+  <div id="results" style="display:none">
+    <div class="stats">
+      <div class="stat"><div class="stat-n" id="sn-w">0</div><div class="stat-l">writers</div></div>
+      <div class="stat"><div class="stat-n" id="sn-a">0</div><div class="stat-l">articles</div></div>
+      <div class="stat"><div class="stat-n" id="sn-c">0</div><div class="stat-l">categories</div></div>
+    </div>
+
+    <div id="uncat-section" style="display:none">
+      <div class="sec-title">Uncategorised writers</div>
+      <p class="sec-desc">These writers published this period but have no category yet. Assign one and save — it writes to both the writer list and the article database.</p>
+      <div class="uncat-card">
+        <div class="uncat-hdr">Writer · Articles · Assign category</div>
+        <div id="uncat-list"></div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <button class="btn-secondary" id="doc-btn" onclick="createDoc()" disabled>Create digest in Google Doc</button>
+    <div class="creating-msg" id="creating-msg">
+      <span class="spinner"></span>Writing to Google Doc — usually under 30 seconds…
+    </div>
+    <div class="status" id="doc-status"></div>
+    <div class="doc-link-wrap" id="doc-link-wrap">
+      <a id="doc-link" class="doc-link" href="#" target="_blank">Open Google Doc →</a>
+    </div>
+    <button class="btn-secondary" id="copy-btn" style="display:none" onclick="copyDigestHtml()">Copy digest for Substack</button>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// CONFIGURATION — update these if script URLs change
+// ============================================================
+const AS1 = 'https://script.google.com/macros/s/AKfycbxy071PQpHB41exiBoMqo5q4dQfjfXn_ovZHkXwfTAAWQFTH2q8WoXaw1s2Q8KqO41Y/exec';
+const AS2 = 'https://script.google.com/macros/s/AKfycbyCZ4CgqOylY8l7z1FxVrJIFK7vfIOxPAsPOdRexNrJ_RwYrCno6VHBeolE3gwV2Ns1/exec';
+
+// ============================================================
+let writers = [], allCats = [], lastResults = null, isRunning = false, lastDigestHtml = '', writerModalMode = 'add';
+const $ = id => document.getElementById(id);
+
+function setDot(s) { $('dot').className = 'dot ' + (s === 'ok' ? 'ok' : s === 'err' ? 'err' : 'spin'); }
+function setStatus(t, err = false) { $('status').textContent = t; $('status').className = 'status' + (err ? ' err' : ''); }
+function setProgress(p) { if (p === null) { $('prog').style.display = 'none'; } else { $('prog').style.display = 'block'; $('prog-inner').style.width = Math.round(p) + '%'; } }
+
+async function loadSheet() {
+  setDot('spin'); $('sheet-lbl').textContent = 'Loading writer list…';
+  setStatus('Loading writer list…'); $('gen-btn').disabled = true;
+  try {
+    const resp = await fetch(AS1);
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = await resp.json();
+    if (!Array.isArray(data)) throw new Error('Unexpected response');
+    writers = data.map(w => ({
+      name: (w.name || '').replace(/^['\u2018\u2019]/, '').trim(),
+      link: (w.link || '').trim(),
+      category: (w.category || '').trim()
+    })).filter(w => w.name);
+    allCats = [...new Set(writers.map(w => w.category).filter(Boolean))].sort();
+    const sel = $('cat-filter');
+    while (sel.options.length > 1) sel.remove(1);
+    allCats.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; sel.appendChild(o); });
+
+    const modalCatSel = $('writer-modal-category');
+    while (modalCatSel.options.length > 1) modalCatSel.remove(1);
+    allCats.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; modalCatSel.appendChild(o); });
+
+    const modalWriterSel = $('writer-modal-select');
+    modalWriterSel.innerHTML = writers.map(w => `<option value="${w.name.replace(/"/g, '&quot;')}">${w.name}</option>`).join('');
+
+    setDot('ok');
+    $('sheet-lbl').textContent = `${writers.length} writers loaded · ${new Date().toLocaleTimeString()}`;
+    setStatus('Ready — pick a date range and generate.');
+    $('gen-btn').disabled = false;
+  } catch (e) {
+    setDot('err'); $('sheet-lbl').textContent = 'Could not load sheet';
+    setStatus('Sheet error: ' + e.message, true);
+  }
+}
+
+async function generate() {
+  if (isRunning || !writers.length) return;
+  const fv = $('d-from').value, tv = $('d-to').value;
+  if (!fv || !tv) { alert('Please select both dates.'); return; }
+  const fromD = new Date(fv + 'T00:00:00'), toD = new Date(tv + 'T23:59:59');
+  if (fromD > toD) { alert('Start date must be before end date.'); return; }
+  const catFilter = $('cat-filter').value;
+
+  isRunning = true;
+  $('gen-btn').disabled = true; $('doc-btn').disabled = true;
+  $('results').style.display = 'none';
+  $('doc-link-wrap').style.display = 'none';
+  $('creating-msg').style.display = 'none';
+  $('doc-status').textContent = '';
+  setProgress(30);
+  setStatus('Querying article database…');
+
+  try {
+    const url = AS2 + '?action=preview&from=' + encodeURIComponent(fv) + '&to=' + encodeURIComponent(tv) + '&cat=' + encodeURIComponent(catFilter);
+    const resp = await fetch(url, { signal: AbortSignal.timeout(30000) });
+    const data = await resp.json();
+    if (!data.success) throw new Error(data.error || 'Unknown error');
+
+    lastResults = { fv, tv, catFilter };
+    $('sn-w').textContent = data.writers || 0;
+    $('sn-a').textContent = data.articles || 0;
+    $('sn-c').textContent = data.categories || 0;
+
+    buildUncatSection(data.uncategorised || []);
+    $('results').style.display = 'block';
+    $('doc-btn').disabled = false;
+    setStatus(`Found ${data.articles || 0} articles from ${data.writers || 0} writers across ${data.categories || 0} categories.`);
+  } catch (e) {
+    setStatus('Error: ' + e.message, true);
+  }
+
+  setProgress(null);
+  isRunning = false; $('gen-btn').disabled = false;
+}
+
+function buildUncatSection(uncatList) {
+  const sec = $('uncat-section');
+  if (!uncatList || !uncatList.length) { sec.style.display = 'none'; return; }
+  sec.style.display = 'block';
+  const list = $('uncat-list');
+  list.innerHTML = '';
+  uncatList.forEach(({ name, articles }) => {
+    const div = document.createElement('div'); div.className = 'uncat-row';
+    const nameDiv = document.createElement('div'); nameDiv.className = 'uncat-name'; nameDiv.textContent = name;
+    const artsDiv = document.createElement('div'); artsDiv.className = 'uncat-arts';
+    artsDiv.innerHTML = (articles || []).map(a => `<a href="${a.url}" target="_blank">${a.title}</a>`).join('');
+    const selDiv = document.createElement('div'); selDiv.className = 'uncat-sel';
+    const sel = document.createElement('select');
+    sel.style.cssText = 'font-size:12px;width:100%';
+    sel.innerHTML = '<option value="">— uncategorised —</option>' + allCats.map(c => `<option value="${c}">${c}</option>`).join('');
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'save-cat-btn'; saveBtn.textContent = 'Save to sheet';
+    sel.addEventListener('change', e => {
+      saveBtn.style.display = e.target.value ? 'block' : 'none';
+      saveBtn.className = 'save-cat-btn';
+      saveBtn.textContent = 'Save to sheet';
+    });
+    saveBtn.addEventListener('click', async () => {
+      const cat = sel.value; if (!cat) return;
+      saveBtn.textContent = 'Saving…'; saveBtn.disabled = true;
+      try {
+        // Script 1 updateCategory now updates BOTH Categorized tab AND Articles tab
+        const url = AS1 + '?action=updateCategory&name=' + encodeURIComponent(name) + '&category=' + encodeURIComponent(cat);
+        const resp = await fetch(url);
+        const data = await resp.json();
+        if (data.success) {
+          saveBtn.textContent = '✓ Saved'; saveBtn.className = 'save-cat-btn saved';
+          const w = writers.find(x => x.name === name);
+          if (w) w.category = cat;
+        } else { saveBtn.textContent = '✗ Error: ' + (data.error || 'unknown'); saveBtn.disabled = false; }
+      } catch (e) { saveBtn.textContent = '✗ Error'; saveBtn.disabled = false; }
+    });
+    selDiv.appendChild(sel); selDiv.appendChild(saveBtn);
+    div.appendChild(nameDiv); div.appendChild(artsDiv); div.appendChild(selDiv);
+    list.appendChild(div);
+  });
+}
+
+async function createDoc() {
+  if (!lastResults) return;
+  const { fv, tv, catFilter } = lastResults;
+  $('doc-btn').disabled = true;
+  $('doc-status').textContent = '';
+  $('doc-status').className = 'status';
+  $('doc-link-wrap').style.display = 'none';
+  $('creating-msg').style.display = 'block';
+
+  try {
+    const url = AS2 + '?action=createDigest&from=' + encodeURIComponent(fv) + '&to=' + encodeURIComponent(tv) + '&cat=' + encodeURIComponent(catFilter);
+    const resp = await fetch(url, { signal: AbortSignal.timeout(120000) });
+    const data = await resp.json();
+    $('creating-msg').style.display = 'none';
+    if (data.success) {
+      $('doc-status').textContent = `✓ ${data.articles} articles from ${data.writers} writers written to Google Doc`;
+      $('doc-status').className = 'status ok';
+      $('doc-link').href = data.url;
+      $('doc-link-wrap').style.display = 'block';
+      lastDigestHtml = data.html || '';
+      $('copy-btn').style.display = lastDigestHtml ? 'block' : 'none';
+      $('copy-btn').textContent = 'Copy digest for Substack';
+    } else {
+      $('doc-status').textContent = '✗ Error: ' + (data.error || 'Unknown error');
+      $('doc-status').className = 'status err';
+    }
+  } catch (e) {
+    $('creating-msg').style.display = 'none';
+    $('doc-status').textContent = '✗ Error: ' + e.message;
+    $('doc-status').className = 'status err';
+  }
+  $('doc-btn').disabled = false;
+}
+
+async function copyDigestHtml() {
+  if (!lastDigestHtml) return;
+  try {
+    const blobHtml = new Blob([lastDigestHtml], { type: 'text/html' });
+    const blobText = new Blob([lastDigestHtml.replace(/<[^>]+>/g, '')], { type: 'text/plain' });
+    await navigator.clipboard.write([new ClipboardItem({ 'text/html': blobHtml, 'text/plain': blobText })]);
+    $('copy-btn').textContent = '✓ Copied — paste into Substack';
+  } catch (e) {
+    $('copy-btn').textContent = '✗ Could not copy: ' + e.message;
+  }
+}
+
+function openWriterModal(mode) {
+  writerModalMode = mode;
+  $('writer-modal-status').textContent = '';
+  $('writer-modal-name').value = '';
+  $('writer-modal-link').value = '';
+  $('writer-modal-category').value = '';
+  if (mode === 'add') {
+    $('writer-modal-title').textContent = 'Add writer';
+    $('writer-modal-select-field').style.display = 'none';
+    $('writer-modal-name').disabled = false;
+    $('writer-modal-bulk-link').style.display = 'inline';
+  } else {
+    $('writer-modal-title').textContent = 'Update writer';
+    $('writer-modal-select-field').style.display = 'flex';
+    if (writers.length) { $('writer-modal-select').selectedIndex = 0; onWriterModalSelect(); }
+    $('writer-modal-bulk-link').style.display = 'none';
+  }
+  $('writer-modal-overlay').style.display = 'flex';
+}
+
+function switchToBulkModal() {
+  closeWriterModal();
+  openBulkModal();
+}
+
+function closeWriterModal() {
+  $('writer-modal-overlay').style.display = 'none';
+}
+
+function onWriterModalSelect() {
+  const name = $('writer-modal-select').value;
+  const w = writers.find(x => x.name === name);
+  if (!w) return;
+  $('writer-modal-name').value = w.name;
+  $('writer-modal-link').value = w.link;
+  $('writer-modal-category').value = w.category;
+}
+
+async function saveWriterModal() {
+  const name = $('writer-modal-name').value.trim();
+  const link = $('writer-modal-link').value.trim();
+  const category = $('writer-modal-category').value;
+  if (!name) { $('writer-modal-status').textContent = 'Name is required'; $('writer-modal-status').className = 'status err'; return; }
+
+  $('writer-modal-save').disabled = true;
+  $('writer-modal-status').textContent = 'Saving…'; $('writer-modal-status').className = 'status';
+
+  try {
+    let url;
+    if (writerModalMode === 'add') {
+      url = AS1 + '?action=addWriter&name=' + encodeURIComponent(name) + '&link=' + encodeURIComponent(link) + '&category=' + encodeURIComponent(category);
+    } else {
+      const originalName = $('writer-modal-select').value;
+      url = AS1 + '?action=updateWriter&originalName=' + encodeURIComponent(originalName) + '&name=' + encodeURIComponent(name) + '&link=' + encodeURIComponent(link) + '&category=' + encodeURIComponent(category);
+    }
+    const resp = await fetch(url);
+    const data = await resp.json();
+    if (data.success) {
+      $('writer-modal-status').textContent = '✓ Saved'; $('writer-modal-status').className = 'status ok';
+      await loadSheet();
+      setTimeout(closeWriterModal, 600);
+    } else {
+      $('writer-modal-status').textContent = '✗ ' + (data.error || 'Unknown error'); $('writer-modal-status').className = 'status err';
+    }
+  } catch (e) {
+    $('writer-modal-status').textContent = '✗ ' + e.message; $('writer-modal-status').className = 'status err';
+  }
+  $('writer-modal-save').disabled = false;
+}
+
+function openBulkModal() {
+  $('bulk-rows').innerHTML = '';
+  for (let i = 0; i < 3; i++) addBulkRow();
+  $('bulk-modal-status').textContent = ''; $('bulk-modal-status').className = 'status';
+  $('bulk-modal-overlay').style.display = 'flex';
+}
+
+function closeBulkModal() {
+  $('bulk-modal-overlay').style.display = 'none';
+}
+
+function addBulkRow() {
+  const rows = $('bulk-rows');
+  const div = document.createElement('div');
+  div.className = 'bulk-row';
+  div.innerHTML = `
+    <input type="text" class="bulk-name" placeholder="Name">
+    <input type="text" class="bulk-link" placeholder="Substack link">
+    <select class="bulk-cat"><option value="">— uncategorised —</option>${allCats.map(c => `<option value="${c}">${c}</option>`).join('')}</select>
+    <button type="button" class="bulk-remove" onclick="this.parentElement.remove(); updateBulkScroll();">×</button>
+  `;
+  rows.appendChild(div);
+  updateBulkScroll();
+}
+
+function updateBulkScroll() {
+  $('bulk-rows').classList.toggle('scrollable', $('bulk-rows').children.length > 10);
+}
+
+async function saveBulkModal() {
+  const entries = [...$('bulk-rows').children].map(r => ({
+    name: r.querySelector('.bulk-name').value.trim(),
+    link: r.querySelector('.bulk-link').value.trim(),
+    category: r.querySelector('.bulk-cat').value
+  })).filter(e => e.name);
+
+  if (!entries.length) {
+    $('bulk-modal-status').textContent = 'Add at least one name'; $('bulk-modal-status').className = 'status err';
+    return;
+  }
+
+  let ok = 0; const failed = [];
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
+    $('bulk-modal-status').textContent = `Saving ${i + 1}/${entries.length}…`; $('bulk-modal-status').className = 'status';
+    try {
+      const url = AS1 + '?action=addWriter&name=' + encodeURIComponent(e.name) + '&link=' + encodeURIComponent(e.link) + '&category=' + encodeURIComponent(e.category);
+      const resp = await fetch(url);
+      const data = await resp.json();
+      if (data.success) ok++; else failed.push(e.name + ': ' + (data.error || 'unknown error'));
+    } catch (err) {
+      failed.push(e.name + ': ' + err.message);
+    }
+  }
+
+  await loadSheet();
+
+  if (failed.length) {
+    $('bulk-modal-status').textContent = `✓ ${ok} added — ${failed.length} failed: ${failed.join('; ')}`;
+    $('bulk-modal-status').className = 'status err';
+  } else {
+    $('bulk-modal-status').textContent = `✓ All ${ok} writers added`;
+    $('bulk-modal-status').className = 'status ok';
+    setTimeout(closeBulkModal, 900);
+  }
+}
+
+// Default date range: last 14 days up to yesterday (today's articles aren't synced yet)
+const yesterday = new Date();
+yesterday.setDate(yesterday.getDate() - 1);
+const twoWeeksAgo = new Date(yesterday); twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+const maxDate = yesterday.toISOString().split('T')[0];
+$('d-from').max = maxDate;
+$('d-to').max = maxDate;
+$('d-to').value = maxDate;
+$('d-from').value = twoWeeksAgo.toISOString().split('T')[0];
+loadSheet();
+</script>
+</body>
+</html>
