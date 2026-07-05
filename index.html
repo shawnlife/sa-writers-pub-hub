@@ -251,10 +251,12 @@ select:focus,input[type=date]:focus{outline:none;border-color:#e11c47}
 
 <script>
 // ============================================================
-// CONFIGURATION — update these if script URLs change
+// CONFIGURATION — paste the deployed /exec URL here after deploying script.js
+// Both AS1 and AS2 now point to the same single script.
 // ============================================================
-const AS1 = 'https://script.google.com/macros/s/AKfycbxy071PQpHB41exiBoMqo5q4dQfjfXn_ovZHkXwfTAAWQFTH2q8WoXaw1s2Q8KqO41Y/exec';
-const AS2 = 'https://script.google.com/macros/s/AKfycbyCZ4CgqOylY8l7z1FxVrJIFK7vfIOxPAsPOdRexNrJ_RwYrCno6VHBeolE3gwV2Ns1/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxy071PQpHB41exiBoMqo5q4dQfjfXn_ovZHkXwfTAAWQFTH2q8WoXaw1s2Q8KqO41Y/exec';
+const AS1 = SCRIPT_URL;
+const AS2 = SCRIPT_URL;
 
 // ============================================================
 let writers = [], allCats = [], lastResults = null, isRunning = false, lastDigestHtml = '', writerModalMode = 'add', multicatOverrides = {};

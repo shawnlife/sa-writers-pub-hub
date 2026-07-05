@@ -5,6 +5,7 @@
   "type": "module",
   "main": "rss-sync.js",
   "dependencies": {
-    "rss-parser": "^3.13.0"
+    "rss-parser": "^3.13.0",
+    "substack-api": "^1.0.0"
   }
 }
