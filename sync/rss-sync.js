@@ -12,38 +12,28 @@ const FEED_TIMEOUT_MS = 10000;
 
 const parser = new Parser({ timeout: FEED_TIMEOUT_MS });
 
-let _debugCount = 0;
+// Substack profile pages return 403 from cloud IPs, so we can't scrape them.
+// Instead, extract the slug from the users/ URL and try slug variants as RSS feeds.
+// If neither works, the writer will be skipped — run resolve-links.js locally to fix.
 async function resolveUsersUrl(link) {
-  const cleanLink = link.split('?')[0];
-  const isDebug = _debugCount < 2;
-  if (isDebug) _debugCount++;
-  try {
-    const resp = await fetch(cleanLink, {
-      signal: AbortSignal.timeout(12000),
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1)',
-        'Accept': 'text/html'
-      }
-    });
-    if (isDebug) console.log(`  [debug] ${cleanLink} → HTTP ${resp.status}, type: ${resp.headers.get('content-type')}`);
-    if (!resp.ok) return null;
-    const html = await resp.text();
-    if (isDebug) console.log(`  [debug] HTML length: ${html.length}, has __NEXT_DATA__: ${html.includes('__NEXT_DATA__')}`);
-    const match = html.match(/<script id="__NEXT_DATA__" type="application\/json">([^<]+)<\/script>/);
-    if (!match) {
-      if (isDebug) console.log(`  [debug] __NEXT_DATA__ not found. First 500 chars: ${html.slice(0, 500)}`);
-      return null;
+  const slugMatch = link.match(/open\.substack\.com\/users\/\d+-(.+?)(?:\?|$)/);
+  if (!slugMatch) return null;
+  const slug = slugMatch[1]; // e.g. "abigail-wood"
+  const noDash = slug.replace(/-/g, '');  // e.g. "abigailwood"
+
+  const candidates = [slug, noDash];
+  // Also try just the first word (handles "name-surname" where pub is "name")
+  const firstWord = slug.split('-')[0];
+  if (firstWord !== slug && firstWord !== noDash) candidates.push(firstWord);
+
+  for (const candidate of candidates) {
+    const feedUrl = `https://${candidate}.substack.com/feed`;
+    try {
+      await parser.parseURL(feedUrl); // succeeds = valid feed
+      return feedUrl;
+    } catch {
+      // try next variant
     }
-    const data = JSON.parse(match[1]);
-    const props = data?.props?.pageProps;
-    if (isDebug) console.log(`  [debug] pageProps keys: ${Object.keys(props || {}).join(', ')}`);
-    const subdomain = props?.user?.primaryPublication?.subdomain
-      || props?.publication?.subdomain
-      || props?.user?.publicationUsers?.[0]?.publication?.subdomain;
-    if (isDebug) console.log(`  [debug] resolved subdomain: ${subdomain}`);
-    if (subdomain) return `https://${subdomain}.substack.com/feed`;
-  } catch (err) {
-    if (isDebug) console.log(`  [debug] threw: ${err.message}`);
   }
   return null;
 }
