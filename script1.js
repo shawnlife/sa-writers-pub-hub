@@ -2,7 +2,7 @@
 // Deployed at: https://script.google.com/macros/s/AKfycbxy071PQpHB41exiBoMqo5q4dQfjfXn_ovZHkXwfTAAWQFTH2q8WoXaw1s2Q8KqO41Y/exec
 // Bound to Google Sheet: 11VMjloWhg9qJNfUMMTTAdLQkqt7DqoU8cvoBmxx1WEk
 
-const SHEET_NAME = 'Categorized';
+const SHEET_NAME = 'Writers';
 
 function doGet(e) {
   const action = e && e.parameter && e.parameter.action;
@@ -13,6 +13,44 @@ function doGet(e) {
   if (action === 'updateWriter') return updateWriter(e.parameter.originalName, e.parameter.name, e.parameter.link, e.parameter.category);
   if (action === 'syncCategories') return syncCategories();
   return getWriters();
+}
+
+// Called by GitHub Actions rss-sync after resolving users/ URLs to real publication URLs.
+// Payload: { updates: [ { name: "Writer Name", link: "https://pub.substack.com" } ] }
+function doPost(e) {
+  try {
+    const payload = JSON.parse(e.postData.contents);
+    const updates = payload.updates || [];
+    if (!updates.length) return respond({ success: true, updated: 0 });
+
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+    const rows = sheet.getDataRange().getValues();
+    const headers = rows[0].map(h => h.toString().toLowerCase().trim());
+    const ni = headers.findIndex(h => h.includes('name'));
+    const li = headers.findIndex(h => h.includes('link'));
+
+    // Build row index map for fast lookup
+    const rowMap = {};
+    rows.slice(1).forEach((r, i) => {
+      if (r[ni]) rowMap[r[ni].toString().trim().toLowerCase()] = i + 2; // 1-indexed + header
+    });
+
+    let updated = 0;
+    for (const { name, link } of updates) {
+      const rowNum = rowMap[name.toLowerCase().trim()];
+      if (!rowNum || !link) continue;
+      sheet.getRange(rowNum, li + 1).setValue(link);
+      updated++;
+    }
+
+    return respond({ success: true, updated });
+  } catch (err) {
+    return respond({ error: err.message });
+  }
+}
+
+function respond(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
 function getWriters() {

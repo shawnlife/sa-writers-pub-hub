@@ -3,7 +3,7 @@
 
 import Parser from 'rss-parser';
 
-const AS1_URL = process.env.AS1_URL || 'https://script.google.com/macros/s/AKfycbxy071PQpHB41exiBoMqo5q4dQfjfXn_ovZHkXwfTAAWQFTH2q8WoXaw1s2Q8KqO41Y/exec';
+const AS1_URL = process.env.AS1_URL || 'https://script.google.com/macros/s/AKfycbzvdzFSv5d29zSfe5ddSiD2i2xEwAnYvZbaju5mvwgZUq_8zx76MlFS6zi5aQg1jltz/exec';
 const AS4_URL = process.env.AS4_URL; // set as GitHub Actions secret
 
 const DAYS_TO_KEEP = 90;
@@ -12,32 +12,43 @@ const FEED_TIMEOUT_MS = 10000;
 
 const parser = new Parser({ timeout: FEED_TIMEOUT_MS });
 
-// Resolve open.substack.com/users/ID-slug URLs using the Substack API.
-// The slug in the URL ≠ publication subdomain (e.g. "zubayr-charles" ≠ "zubayrcharles"),
-// so we use the numeric user ID to look up their actual publication via the API.
+// Resolve open.substack.com/users/ID-slug URLs by scraping the profile page.
+// Substack profile pages are Next.js apps — the __NEXT_DATA__ JSON block in the
+// page HTML contains the user's actual publication subdomain. The slug in the
+// users/ URL ≠ publication subdomain, so we can't guess it directly.
 async function resolveUsersUrl(link) {
-  const idMatch = link.match(/open\.substack\.com\/users\/(\d+)-/);
-  if (!idMatch) return null;
-  const userId = idMatch[1];
+  const cleanLink = link.split('?')[0]; // strip ?utm_source=mentions etc
   try {
-    const resp = await fetch(`https://substack.com/api/v1/user/${userId}/public_profile`, {
-      signal: AbortSignal.timeout(8000),
-      headers: { 'User-Agent': 'Mozilla/5.0' }
+    const resp = await fetch(cleanLink, {
+      signal: AbortSignal.timeout(12000),
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1)',
+        'Accept': 'text/html'
+      }
     });
     if (!resp.ok) return null;
-    const data = await resp.json();
-    // Primary publication subdomain
-    const subdomain = data?.primaryPublication?.subdomain
-      || data?.publicationUsers?.[0]?.publication?.subdomain;
+    const html = await resp.text();
+    // Extract Next.js page data — always present on Substack profile pages
+    const match = html.match(/<script id="__NEXT_DATA__" type="application\/json">([^<]+)<\/script>/);
+    if (!match) return null;
+    const data = JSON.parse(match[1]);
+    // The publication is nested in props.pageProps — structure varies slightly
+    const props = data?.props?.pageProps;
+    const subdomain = props?.user?.primaryPublication?.subdomain
+      || props?.publication?.subdomain
+      || props?.user?.publicationUsers?.[0]?.publication?.subdomain;
     if (subdomain) return `https://${subdomain}.substack.com/feed`;
-    // Fall back to handle if no publication found
-    const handle = data?.handle;
-    if (handle) return `https://${handle}.substack.com/feed`;
-  } catch {}
+  } catch {
+    return null;
+  }
   return null;
 }
 
-async function slugToFeed(link) {
+// resolvedLinks: name → resolved publication URL (collected this run, sent to sheet at end)
+const resolvedLinks = [];
+
+async function slugToFeed(writer) {
+  const link = writer.link;
   if (!link) return null;
   // open.substack.com/pub/slug — pub slug matches subdomain directly
   const m1 = link.match(/open\.substack\.com\/pub\/([^/?]+)/);
@@ -45,13 +56,21 @@ async function slugToFeed(link) {
   // Direct substack URL — subdomain is the feed slug
   const m3 = link.match(/^https?:\/\/([^.]+)\.substack\.com/);
   if (m3 && m3[1] !== 'open') return `https://${m3[1]}.substack.com/feed`;
-  // open.substack.com/users/ID-slug — use API to resolve actual subdomain
-  if (link.includes('open.substack.com/users/')) return resolveUsersUrl(link);
+  // open.substack.com/users/ID-slug — scrape profile page for real subdomain
+  if (link.includes('open.substack.com/users/')) {
+    const resolved = await resolveUsersUrl(link);
+    if (resolved) {
+      // Store the base publication URL (without /feed) so the sheet gets a clean link
+      const pubUrl = resolved.replace('/feed', '');
+      resolvedLinks.push({ name: writer.name, link: pubUrl });
+    }
+    return resolved;
+  }
   return null;
 }
 
 async function fetchWriterFeed(writer, cutoff) {
-  const feedUrl = await slugToFeed(writer.link);
+  const feedUrl = await slugToFeed(writer);
   if (!feedUrl) return [];
   try {
     const feed = await parser.parseURL(feedUrl);
@@ -112,6 +131,24 @@ async function main() {
   if (!AS4_URL) {
     console.log('Dry run complete — no articles written (AS4_URL not set).');
     return;
+  }
+
+  // Store resolved links back to the sheet so future runs skip profile-page scraping
+  if (resolvedLinks.length > 0) {
+    console.log(`Storing ${resolvedLinks.length} resolved publication URLs back to sheet…`);
+    try {
+      const storeResp = await fetch(AS1_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ updates: resolvedLinks }),
+        redirect: 'follow'
+      });
+      const storeResult = await storeResp.json();
+      if (storeResult.error) console.warn('Link store warning:', storeResult.error);
+      else console.log(`Stored ${storeResult.updated} resolved links.`);
+    } catch (err) {
+      console.warn('Could not store resolved links:', err.message);
+    }
   }
 
   if (allArticles.length === 0) {
