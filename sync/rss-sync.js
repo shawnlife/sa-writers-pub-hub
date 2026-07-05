@@ -62,8 +62,7 @@ async function runInBatches(items, batchSize, fn) {
 
 async function main() {
   if (!AS4_URL) {
-    console.error('AS4_URL env var is not set. Add it as a GitHub Actions secret.');
-    process.exit(1);
+    console.warn('AS4_URL is not set — skipping sheet update. Deploy Script 4 and add AS4_URL as a GitHub secret to enable writing.');
   }
 
   console.log('Fetching writer list from Script 1…');
@@ -82,6 +81,11 @@ async function main() {
     w => fetchWriterFeed(w, cutoff)
   );
   console.log(`Found ${allArticles.length} articles within the last ${DAYS_TO_KEEP} days.`);
+
+  if (!AS4_URL) {
+    console.log('Dry run complete — no articles written (AS4_URL not set).');
+    return;
+  }
 
   console.log('Sending articles to Script 4…');
   const postResp = await fetch(AS4_URL, {
