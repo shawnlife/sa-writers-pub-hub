@@ -225,6 +225,15 @@ select:focus,input[type=date]:focus{outline:none;border-color:#e11c47}
       </div>
     </div>
 
+    <div id="multicat-section" style="display:none">
+      <div class="sec-title">Writers with multiple categories</div>
+      <p class="sec-desc">These writers are tagged under more than one category. Choose where their articles should appear in this digest — defaults to their primary category.</p>
+      <div class="uncat-card">
+        <div class="uncat-hdr">Writer · Articles · File under</div>
+        <div id="multicat-list"></div>
+      </div>
+    </div>
+
     <div class="divider"></div>
 
     <button class="btn-secondary" id="doc-btn" onclick="createDoc()" disabled>Create digest in Google Doc</button>
@@ -248,7 +257,7 @@ const AS1 = 'https://script.google.com/macros/s/AKfycbxy071PQpHB41exiBoMqo5q4dQf
 const AS2 = 'https://script.google.com/macros/s/AKfycbyCZ4CgqOylY8l7z1FxVrJIFK7vfIOxPAsPOdRexNrJ_RwYrCno6VHBeolE3gwV2Ns1/exec';
 
 // ============================================================
-let writers = [], allCats = [], lastResults = null, isRunning = false, lastDigestHtml = '', writerModalMode = 'add';
+let writers = [], allCats = [], lastResults = null, isRunning = false, lastDigestHtml = '', writerModalMode = 'add', multicatOverrides = {};
 const $ = id => document.getElementById(id);
 
 function setDot(s) { $('dot').className = 'dot ' + (s === 'ok' ? 'ok' : s === 'err' ? 'err' : 'spin'); }
@@ -266,9 +275,11 @@ async function loadSheet() {
     writers = data.map(w => ({
       name: (w.name || '').replace(/^['\u2018\u2019]/, '').trim(),
       link: (w.link || '').trim(),
-      category: (w.category || '').trim()
+      cat1: (w.cat1 || '').trim(),
+      cat2: (w.cat2 || '').trim(),
+      cat3: (w.cat3 || '').trim()
     })).filter(w => w.name);
-    allCats = [...new Set(writers.map(w => w.category).filter(Boolean))].sort();
+    allCats = [...new Set(writers.map(w => w.cat1).filter(Boolean))].sort();
     const sel = $('cat-filter');
     while (sel.options.length > 1) sel.remove(1);
     allCats.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; sel.appendChild(o); });
@@ -318,7 +329,9 @@ async function generate() {
     $('sn-a').textContent = data.articles || 0;
     $('sn-c').textContent = data.categories || 0;
 
+    multicatOverrides = {};
     buildUncatSection(data.uncategorised || []);
+    buildMulticatSection(data.multicat_writers || []);
     $('results').style.display = 'block';
     $('doc-btn').disabled = false;
     setStatus(`Found ${data.articles || 0} articles from ${data.writers || 0} writers across ${data.categories || 0} categories.`);
@@ -328,6 +341,29 @@ async function generate() {
 
   setProgress(null);
   isRunning = false; $('gen-btn').disabled = false;
+}
+
+function buildMulticatSection(multicatList) {
+  const sec = $('multicat-section');
+  if (!multicatList || !multicatList.length) { sec.style.display = 'none'; return; }
+  sec.style.display = 'block';
+  const list = $('multicat-list');
+  list.innerHTML = '';
+  multicatList.forEach(({ name, cats, articles }) => {
+    const div = document.createElement('div'); div.className = 'uncat-row';
+    const nameDiv = document.createElement('div'); nameDiv.className = 'uncat-name'; nameDiv.textContent = name;
+    const artsDiv = document.createElement('div'); artsDiv.className = 'uncat-arts';
+    artsDiv.innerHTML = (articles || []).map(a => `<a href="${a.url}" target="_blank">${a.title}</a>`).join('');
+    const selDiv = document.createElement('div'); selDiv.className = 'uncat-sel';
+    const sel = document.createElement('select');
+    sel.style.cssText = 'font-size:12px;width:100%';
+    sel.innerHTML = (cats || []).map((c, i) => `<option value="${c}"${i === 0 ? ' selected' : ''}>${c}${i === 0 ? ' (primary)' : ''}</option>`).join('');
+    multicatOverrides[name] = cats[0]; // default to primary
+    sel.addEventListener('change', e => { multicatOverrides[name] = e.target.value; });
+    selDiv.appendChild(sel);
+    div.appendChild(nameDiv); div.appendChild(artsDiv); div.appendChild(selDiv);
+    list.appendChild(div);
+  });
 }
 
 function buildUncatSection(uncatList) {
@@ -383,7 +419,7 @@ async function createDoc() {
   $('creating-msg').style.display = 'block';
 
   try {
-    const url = AS2 + '?action=createDigest&from=' + encodeURIComponent(fv) + '&to=' + encodeURIComponent(tv) + '&cat=' + encodeURIComponent(catFilter);
+    const url = AS2 + '?action=createDigest&from=' + encodeURIComponent(fv) + '&to=' + encodeURIComponent(tv) + '&cat=' + encodeURIComponent(catFilter) + '&overrides=' + encodeURIComponent(JSON.stringify(multicatOverrides));
     const resp = await fetch(url, { signal: AbortSignal.timeout(120000) });
     const data = await resp.json();
     $('creating-msg').style.display = 'none';
@@ -454,7 +490,7 @@ function onWriterModalSelect() {
   if (!w) return;
   $('writer-modal-name').value = w.name;
   $('writer-modal-link').value = w.link;
-  $('writer-modal-category').value = w.category;
+  $('writer-modal-category').value = w.cat1;
 }
 
 async function saveWriterModal() {

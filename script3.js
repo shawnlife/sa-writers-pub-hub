@@ -13,12 +13,13 @@ function syncAllFeeds() {
   const writersSheet = ss.getSheetByName(WRITERS_SHEET);
   const articlesSheet = ss.getSheetByName(ARTICLES_SHEET);
 
-  // Load writers
+  // Load writers — use the first category column (Category 1) as the stored category
   const wRows = writersSheet.getDataRange().getValues();
   const wHeaders = wRows[0].map(h => h.toString().toLowerCase().trim());
   const ni = wHeaders.findIndex(h => h.includes('name'));
   const li = wHeaders.findIndex(h => h.includes('link'));
-  const ci = wHeaders.findIndex(h => h.includes('cat'));
+  const catIndices = wHeaders.reduce((acc, h, i) => { if (h.includes('cat')) acc.push(i); return acc; }, []);
+  const ci = catIndices[0] ?? -1; // Category 1 only — articles stored under primary category
 
   const writers = wRows.slice(1).filter(r => r[ni] && r[ni].toString().trim()).map(r => ({
     name: r[ni].toString().trim(),
@@ -95,9 +96,14 @@ function parseRSS(xml) {
 
 function slugToFeed(link) {
   if (!link) return null;
-  const m2 = link.match(/open\.substack\.com\/pub\/([^/?]+)/);
+  // open.substack.com/pub/slug
+  const m1 = link.match(/open\.substack\.com\/pub\/([^/?]+)/);
+  if (m1) return 'https://' + m1[1] + '.substack.com/feed';
+  // open.substack.com/users/12345-slug
+  const m2 = link.match(/open\.substack\.com\/users\/\d+-([^/?&]+)/);
   if (m2) return 'https://' + m2[1] + '.substack.com/feed';
-  const m = link.match(/open\.substack\.com\/users\/\d+-([^/?&]+)/);
-  if (m) return 'https://' + m[1] + '.substack.com/feed';
+  // Direct substack URL: writer.substack.com or writer.substack.com/...
+  const m3 = link.match(/^https?:\/\/([^.]+)\.substack\.com/);
+  if (m3 && m3[1] !== 'open') return 'https://' + m3[1] + '.substack.com/feed';
   return null;
 }

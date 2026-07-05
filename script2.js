@@ -36,9 +36,10 @@ function doGet(e) {
     const from = e.parameter.from;
     const to = e.parameter.to;
     const catFilter = e.parameter.cat || '__all__';
+    const overrides = e.parameter.overrides ? JSON.parse(e.parameter.overrides) : {};
     if (!from || !to) return respond({ error: 'Missing from/to dates' });
     if (action === 'preview') return respond(previewDigest(from, to, catFilter));
-    if (action === 'createDigest') return respond(buildAndWriteDigest(from, to, catFilter));
+    if (action === 'createDigest') return respond(buildAndWriteDigest(from, to, catFilter, overrides));
     return respond({ error: 'Unknown action: ' + action });
   } catch (err) {
     return respond({ error: err.message });
@@ -51,19 +52,39 @@ function respond(obj) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-function loadArticles(fromD, toD, catFilter) {
-  const ss = SpreadsheetApp.openById(SHEET_ID);
-
-  // Load writer profile links
+// Loads writer profile links and all category columns from the Categorized sheet.
+// Returns { profileMap, writerCatsMap } where:
+//   profileMap: { writerName → profileUrl }
+//   writerCatsMap: { writerName → [cat1, cat2, cat3] (non-empty only) }
+function loadWriterData(ss) {
   const wSheet = ss.getSheetByName(WRITERS_SHEET);
   const wRows = wSheet.getDataRange().getValues();
   const wHeaders = wRows[0].map(h => h.toString().toLowerCase().trim());
   const wni = wHeaders.findIndex(h => h.includes('name'));
   const wli = wHeaders.findIndex(h => h.includes('link'));
+  const catIndices = wHeaders.reduce((acc, h, i) => { if (h.includes('cat')) acc.push(i); return acc; }, []);
+  const [ci1, ci2, ci3] = [catIndices[0] ?? -1, catIndices[1] ?? -1, catIndices[2] ?? -1];
+
   const profileMap = {};
+  const writerCatsMap = {};
   wRows.slice(1).forEach(r => {
-    if (r[wni]) profileMap[r[wni].toString().trim()] = r[wli]?.toString().trim() || '';
+    if (!r[wni]) return;
+    const name = r[wni].toString().trim();
+    profileMap[name] = r[wli]?.toString().trim() || '';
+    const cats = [
+      ci1 >= 0 && r[ci1] ? r[ci1].toString().trim() : '',
+      ci2 >= 0 && r[ci2] ? r[ci2].toString().trim() : '',
+      ci3 >= 0 && r[ci3] ? r[ci3].toString().trim() : ''
+    ].filter(Boolean);
+    writerCatsMap[name] = cats;
   });
+
+  return { profileMap, writerCatsMap };
+}
+
+function loadArticles(fromD, toD, catFilter, overrides) {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const { profileMap, writerCatsMap } = loadWriterData(ss);
 
   // Load and filter articles
   const aSheet = ss.getSheetByName(ARTICLES_SHEET);
@@ -71,12 +92,13 @@ function loadArticles(fromD, toD, catFilter) {
 
   const catMap = {};
   const uncatMap = {};
+  const multicatPending = {}; // writers with 2+ cats who need disambiguation
   let totalArticles = 0;
 
   for (let i = 1; i < aRows.length; i++) {
     const row = aRows[i];
     const writerName = (row[0] || '').toString().trim();
-    const category = (row[1] || '').toString().trim();
+    const storedCategory = (row[1] || '').toString().trim();
     const title = (row[2] || '').toString().trim();
     const url = (row[3] || '').toString().trim();
     const pubDateRaw = row[4];
@@ -85,34 +107,49 @@ function loadArticles(fromD, toD, catFilter) {
     const pubDate = new Date(pubDateRaw);
     if (isNaN(pubDate.getTime())) continue;
     if (pubDate < fromD || pubDate > toD) continue;
-    if (catFilter !== '__all__' && category !== catFilter) continue;
+
+    const writerCats = writerCatsMap[writerName] || (storedCategory ? [storedCategory] : []);
+    const effectiveCat = overrides[writerName] || storedCategory;
+
+    if (catFilter !== '__all__' && !writerCats.includes(catFilter) && effectiveCat !== catFilter) continue;
 
     const profileLink = getProfileUrl(profileMap[writerName] || '');
 
-    if (category) {
-      if (!catMap[category]) catMap[category] = {};
-      if (!catMap[category][writerName]) catMap[category][writerName] = { profileLink, articles: [] };
-      catMap[category][writerName].articles.push({ title, url });
+    if (effectiveCat) {
+      if (!catMap[effectiveCat]) catMap[effectiveCat] = {};
+      if (!catMap[effectiveCat][writerName]) catMap[effectiveCat][writerName] = { profileLink, articles: [] };
+      catMap[effectiveCat][writerName].articles.push({ title, url });
     } else {
       if (!uncatMap[writerName]) uncatMap[writerName] = { profileLink, articles: [] };
       uncatMap[writerName].articles.push({ title, url });
     }
     totalArticles++;
+
+    // Track writers with multiple categories who haven't had an override set
+    if (writerCats.length > 1 && !overrides[writerName]) {
+      if (!multicatPending[writerName]) multicatPending[writerName] = { cats: writerCats, articles: [] };
+      multicatPending[writerName].articles.push({ title, url });
+    }
   }
 
   const writerCount = Object.values(catMap).reduce((n, cat) => n + Object.keys(cat).length, 0) + Object.keys(uncatMap).length;
 
-  return { catMap, uncatMap, totalArticles, writerCount };
+  return { catMap, uncatMap, multicatPending, totalArticles, writerCount };
 }
 
 function previewDigest(fromStr, toStr, catFilter) {
   const fromD = new Date(fromStr + 'T00:00:00');
   const toD = new Date(toStr + 'T23:59:59');
-  const { catMap, uncatMap, totalArticles, writerCount } = loadArticles(fromD, toD, catFilter);
+  const { catMap, uncatMap, multicatPending, totalArticles, writerCount } = loadArticles(fromD, toD, catFilter, {});
 
-  // Build uncategorised list for the tool UI
   const uncategorised = Object.entries(uncatMap).map(([name, { articles }]) => ({
     name,
+    articles: articles.slice(0, 3)
+  }));
+
+  const multicat_writers = Object.entries(multicatPending).map(([name, { cats, articles }]) => ({
+    name,
+    cats,
     articles: articles.slice(0, 3)
   }));
 
@@ -121,14 +158,15 @@ function previewDigest(fromStr, toStr, catFilter) {
     writers: writerCount,
     articles: totalArticles,
     categories: Object.keys(catMap).length + (Object.keys(uncatMap).length > 0 ? 1 : 0),
-    uncategorised
+    uncategorised,
+    multicat_writers
   };
 }
 
-function buildAndWriteDigest(fromStr, toStr, catFilter) {
+function buildAndWriteDigest(fromStr, toStr, catFilter, overrides) {
   const fromD = new Date(fromStr + 'T00:00:00');
   const toD = new Date(toStr + 'T23:59:59');
-  const { catMap, uncatMap, totalArticles, writerCount } = loadArticles(fromD, toD, catFilter);
+  const { catMap, uncatMap, totalArticles, writerCount } = loadArticles(fromD, toD, catFilter, overrides);
 
   const tabName = formatTabName(fromStr, toStr);
   writeToDoc(catMap, uncatMap, tabName);
@@ -139,16 +177,16 @@ function buildAndWriteDigest(fromStr, toStr, catFilter) {
     articles: totalArticles,
     tab: tabName,
     url: 'https://docs.google.com/document/d/' + DIGEST_DOC_ID + '/edit',
-    html: buildDigestHtml(catMap, uncatMap, tabName)
+    html: buildDigestHtml(catMap, uncatMap, tabName, catFilter === '__all__')
   };
 }
 
-function buildDigestHtml(catMap, uncatMap, tabName) {
+function buildDigestHtml(catMap, uncatMap, tabName, includeImages) {
   let html = '<h1>Digest: ' + escapeHtml(tabName) + '</h1>';
 
   const sortedCats = Object.keys(catMap).sort();
   for (const cat of sortedCats) {
-    html += categoryImageHtml(cat);
+    if (includeImages) html += categoryImageHtml(cat);
     html += '<h2>' + escapeHtml(cat) + '</h2>';
     const writers = Object.keys(catMap[cat]).sort();
     for (const writerName of writers) {

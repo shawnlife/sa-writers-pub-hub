@@ -11,6 +11,7 @@ function doGet(e) {
   if (action === 'updateCategory') return updateCategory(e.parameter.name, e.parameter.category);
   if (action === 'addWriter') return addWriter(e.parameter.name, e.parameter.link, e.parameter.category);
   if (action === 'updateWriter') return updateWriter(e.parameter.originalName, e.parameter.name, e.parameter.link, e.parameter.category);
+  if (action === 'syncCategories') return syncCategories();
   return getWriters();
 }
 
@@ -20,11 +21,16 @@ function getWriters() {
   const headers = rows[0].map(h => h.toString().toLowerCase().trim());
   const ni = headers.findIndex(h => h.includes('name'));
   const li = headers.findIndex(h => h.includes('link'));
-  const ci = headers.findIndex(h => h.includes('cat'));
+  // Find all category columns in order (category 1, category 2, category 3)
+  const catIndices = headers.reduce((acc, h, i) => { if (h.includes('cat')) acc.push(i); return acc; }, []);
+  const [ci1, ci2, ci3] = [catIndices[0] ?? -1, catIndices[1] ?? -1, catIndices[2] ?? -1];
+
   const writers = rows.slice(1).filter(r => r[ni] && r[ni].toString().trim()).map(r => ({
     name: r[ni].toString().trim(),
     link: r[li] ? r[li].toString().trim() : '',
-    category: ci >= 0 && r[ci] ? r[ci].toString().trim() : ''
+    cat1: ci1 >= 0 && r[ci1] ? r[ci1].toString().trim() : '',
+    cat2: ci2 >= 0 && r[ci2] ? r[ci2].toString().trim() : '',
+    cat3: ci3 >= 0 && r[ci3] ? r[ci3].toString().trim() : ''
   }));
   return ContentService.createTextOutput(JSON.stringify(writers)).setMimeType(ContentService.MimeType.JSON);
 }
@@ -48,7 +54,7 @@ function updateCategory(name, category) {
     const rows = sheet.getDataRange().getValues();
     const nameLower = name.toString().trim().toLowerCase();
 
-    // Update Categorized tab (column C)
+    // Update Categorized tab (column C = Category 1)
     let updatedRow = -1;
     for (let i = 1; i < rows.length; i++) {
       if (rows[i][0] && rows[i][0].toString().trim().toLowerCase() === nameLower) {
@@ -126,6 +132,47 @@ function updateWriter(originalName, name, link, category) {
     }
 
     return ContentService.createTextOutput(JSON.stringify({ success: true, row: rowIdx })).setMimeType(ContentService.MimeType.JSON);
+  } catch (e) {
+    return ContentService.createTextOutput(JSON.stringify({ error: e.message })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// Re-syncs Category 1 from Categorized tab into all matching rows in the Articles tab.
+// Run this once after bulk-editing categories directly in the sheet, to ensure the
+// Articles tab reflects the current Category 1 values.
+function syncCategories() {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName(SHEET_NAME);
+    const rows = sheet.getDataRange().getValues();
+    const headers = rows[0].map(h => h.toString().toLowerCase().trim());
+    const ni = headers.findIndex(h => h.includes('name'));
+    const catIndices = headers.reduce((acc, h, i) => { if (h.includes('cat')) acc.push(i); return acc; }, []);
+    const ci1 = catIndices[0] ?? -1;
+
+    // Build name → category1 map
+    const catMap = {};
+    rows.slice(1).forEach(r => {
+      const name = r[ni]?.toString().trim();
+      if (name) catMap[name.toLowerCase()] = (ci1 >= 0 && r[ci1] ? r[ci1].toString().trim() : '');
+    });
+
+    const articlesSheet = ss.getSheetByName('Articles');
+    if (!articlesSheet) return ContentService.createTextOutput(JSON.stringify({ error: 'Articles sheet not found' })).setMimeType(ContentService.MimeType.JSON);
+
+    const aRows = articlesSheet.getDataRange().getValues();
+    let updated = 0;
+    for (let i = 1; i < aRows.length; i++) {
+      const writerName = aRows[i][0]?.toString().trim();
+      if (!writerName) continue;
+      const newCat = catMap[writerName.toLowerCase()];
+      if (newCat !== undefined && newCat !== aRows[i][1]?.toString().trim()) {
+        articlesSheet.getRange(i + 1, 2).setValue(newCat);
+        updated++;
+      }
+    }
+
+    return ContentService.createTextOutput(JSON.stringify({ success: true, updated })).setMimeType(ContentService.MimeType.JSON);
   } catch (e) {
     return ContentService.createTextOutput(JSON.stringify({ error: e.message })).setMimeType(ContentService.MimeType.JSON);
   }
