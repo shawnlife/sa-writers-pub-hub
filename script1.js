@@ -38,12 +38,15 @@ function doPost(e) {
       if (r[ni]) rowMap[r[ni].toString().trim().toLowerCase()] = i + 2;
     });
 
+    const lpi = headers.findIndex(h => h.includes('last') && h.includes('post'));
+
     let updated = 0;
-    for (const { name, link, feeds } of updates) {
+    for (const { name, link, feeds, lastPost } of updates) {
       const rowNum = rowMap[name.toLowerCase().trim()];
       if (!rowNum) continue;
-      if (link && li >= 0) sheet.getRange(rowNum, li + 1).setValue(link);
-      if (feeds && fi >= 0) sheet.getRange(rowNum, fi + 1).setValue(feeds);
+      if (link !== undefined && li >= 0) sheet.getRange(rowNum, li + 1).setValue(link);
+      if (feeds !== undefined && fi >= 0) sheet.getRange(rowNum, fi + 1).setValue(feeds);
+      if (lastPost !== undefined && lpi >= 0) sheet.getRange(rowNum, lpi + 1).setValue(lastPost);
       updated++;
     }
 
