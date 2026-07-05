@@ -293,18 +293,26 @@ function syncRSS() {
 
   console.log(`Fetching ${tasks.length} feeds…`);
 
-  let responses;
-  try {
-    responses = UrlFetchApp.fetchAll(tasks.map(t => ({
-      url: t.url,
-      method: 'get',
-      headers: RSS_HEADERS,
-      muteHttpExceptions: true,
-      followRedirects: true
-    })));
-  } catch (err) {
-    console.error('fetchAll error: ' + err.message);
-    return;
+  // fetchAll rate-limits at ~50 concurrent requests — batch with a short sleep
+  const BATCH_SIZE = 50;
+  const responses = [];
+  for (let b = 0; b < tasks.length; b += BATCH_SIZE) {
+    const batch = tasks.slice(b, b + BATCH_SIZE);
+    try {
+      const batchResponses = UrlFetchApp.fetchAll(batch.map(t => ({
+        url: t.url,
+        method: 'get',
+        headers: RSS_HEADERS,
+        muteHttpExceptions: true,
+        followRedirects: true
+      })));
+      responses.push(...batchResponses);
+    } catch (err) {
+      console.error(`fetchAll error on batch ${b}–${b + batch.length}: ` + err.message);
+      // Push nulls so indexes stay aligned with tasks
+      for (let i = 0; i < batch.length; i++) responses.push(null);
+    }
+    if (b + BATCH_SIZE < tasks.length) Utilities.sleep(1000);
   }
 
   const cutoff = new Date();
@@ -332,7 +340,7 @@ function syncRSS() {
   for (let i = 0; i < responses.length; i++) {
     const { name, cat, url } = tasks[i];
     const resp = responses[i];
-    if (resp.getResponseCode() !== 200) { failed++; continue; }
+    if (!resp || resp.getResponseCode() !== 200) { failed++; continue; }
     fetched++;
     for (const item of parseRSS(resp.getContentText())) {
       if (!item.url || existingUrls.has(item.url) || !item.pubDate || item.pubDate < cutoff) continue;
