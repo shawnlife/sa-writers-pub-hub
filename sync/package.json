@@ -1,0 +1,10 @@
+{
+  "name": "sa-writers-rss-sync",
+  "version": "1.0.0",
+  "description": "Fetches RSS feeds for all SA Writers Pub Hub writers and pushes new articles to Google Sheets via Apps Script",
+  "type": "module",
+  "main": "rss-sync.js",
+  "dependencies": {
+    "rss-parser": "^3.13.0"
+  }
+}

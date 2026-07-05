@@ -1,0 +1,29 @@
+name: RSS Sync
+
+on:
+  schedule:
+    # 1am UTC = 3am SAST — runs daily after midnight SA time
+    - cron: '0 1 * * *'
+  workflow_dispatch: # allow manual trigger from GitHub Actions tab
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+        working-directory: sync
+
+      - name: Run RSS sync
+        run: node rss-sync.js
+        working-directory: sync
+        env:
+          # AS1_URL is already hardcoded in rss-sync.js as a fallback
+          # AS4_URL must be set — add it as a repository secret once Script 4 is deployed
+          AS4_URL: ${{ secrets.AS4_URL }}
