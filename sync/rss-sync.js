@@ -13,11 +13,15 @@ const FEED_TIMEOUT_MS = 10000;
 
 const parser = new Parser({ timeout: FEED_TIMEOUT_MS });
 
+let _debugFeeds = 0;
 async function fetchFeed(feedUrl, writer, cutoff) {
+  const isDebug = _debugFeeds < 5;
+  if (isDebug) _debugFeeds++;
   try {
     const feed = await parser.parseURL(feedUrl);
+    const items = feed.items || [];
     const articles = [];
-    for (const item of feed.items || []) {
+    for (const item of items) {
       if (!item.title || !item.link) continue;
       const pubDate = item.pubDate ? new Date(item.pubDate) : null;
       if (!pubDate || isNaN(pubDate.getTime()) || pubDate < cutoff) continue;
@@ -29,8 +33,13 @@ async function fetchFeed(feedUrl, writer, cutoff) {
         pubDate: pubDate.toISOString()
       });
     }
+    if (isDebug) {
+      const newest = items[0]?.pubDate || 'none';
+      console.log(`  [debug] ${feedUrl} → ${items.length} items, newest: ${newest}, in-window: ${articles.length}`);
+    }
     return articles;
-  } catch {
+  } catch (err) {
+    if (isDebug) console.log(`  [debug] ${feedUrl} → FAILED: ${err.message}`);
     return [];
   }
 }
