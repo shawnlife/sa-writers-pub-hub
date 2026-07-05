@@ -11,7 +11,13 @@ const DAYS_TO_KEEP = 90;
 const FEED_CONCURRENCY = 20;
 const FEED_TIMEOUT_MS = 10000;
 
-const parser = new Parser({ timeout: FEED_TIMEOUT_MS });
+const parser = new Parser({
+  timeout: FEED_TIMEOUT_MS,
+  headers: {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'application/rss+xml, application/xml, text/xml, */*'
+  }
+});
 
 let _debugFeeds = 0;
 async function fetchFeed(feedUrl, writer, cutoff) {
