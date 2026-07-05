@@ -87,6 +87,11 @@ async function main() {
     return;
   }
 
+  if (allArticles.length === 0) {
+    console.log('No new articles found — nothing to write.');
+    return;
+  }
+
   console.log('Sending articles to Script 4…');
   const postResp = await fetch(AS4_URL, {
     method: 'POST',
