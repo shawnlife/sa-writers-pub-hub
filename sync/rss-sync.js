@@ -12,19 +12,38 @@ const FEED_TIMEOUT_MS = 10000;
 
 const parser = new Parser({ timeout: FEED_TIMEOUT_MS });
 
-function slugToFeed(link) {
+// Resolve open.substack.com/users/... URLs by following redirects to get the
+// real @handle, which matches the actual publication subdomain.
+// e.g. /users/211650717-zubayr-charles → substack.com/@zubayrcharles → zubayrcharles.substack.com/feed
+async function resolveUsersUrl(link) {
+  try {
+    const resp = await fetch(link, {
+      redirect: 'follow',
+      signal: AbortSignal.timeout(8000),
+      headers: { 'User-Agent': 'Mozilla/5.0' }
+    });
+    const finalUrl = resp.url;
+    const m = finalUrl.match(/substack\.com\/@([^/?]+)/);
+    if (m) return `https://${m[1]}.substack.com/feed`;
+  } catch {}
+  return null;
+}
+
+async function slugToFeed(link) {
   if (!link) return null;
+  // open.substack.com/pub/slug — pub slug matches subdomain directly
   const m1 = link.match(/open\.substack\.com\/pub\/([^/?]+)/);
   if (m1) return `https://${m1[1]}.substack.com/feed`;
-  const m2 = link.match(/open\.substack\.com\/users\/\d+-([^/?&]+)/);
-  if (m2) return `https://${m2[1]}.substack.com/feed`;
+  // Direct substack URL — subdomain is the feed slug
   const m3 = link.match(/^https?:\/\/([^.]+)\.substack\.com/);
   if (m3 && m3[1] !== 'open') return `https://${m3[1]}.substack.com/feed`;
+  // open.substack.com/users/ID-slug — slug ≠ publication subdomain, must resolve
+  if (link.includes('open.substack.com/users/')) return resolveUsersUrl(link);
   return null;
 }
 
 async function fetchWriterFeed(writer, cutoff) {
-  const feedUrl = slugToFeed(writer.link);
+  const feedUrl = await slugToFeed(writer.link);
   if (!feedUrl) return [];
   try {
     const feed = await parser.parseURL(feedUrl);
