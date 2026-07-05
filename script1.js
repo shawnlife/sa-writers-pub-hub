@@ -15,8 +15,10 @@ function doGet(e) {
   return getWriters();
 }
 
-// Called by GitHub Actions rss-sync after resolving users/ URLs to real publication URLs.
-// Payload: { updates: [ { name: "Writer Name", link: "https://pub.substack.com" } ] }
+// Called by resolve-links.js (run locally) to store resolved profile handles and feeds.
+// Payload: { updates: [ { name, link, feeds } ] }
+// - link: "https://substack.com/@handle" (clean profile URL)
+// - feeds: "https://pub1.substack.com/feed,https://pub2.substack.com/feed"
 function doPost(e) {
   try {
     const payload = JSON.parse(e.postData.contents);
@@ -28,18 +30,20 @@ function doPost(e) {
     const headers = rows[0].map(h => h.toString().toLowerCase().trim());
     const ni = headers.findIndex(h => h.includes('name'));
     const li = headers.findIndex(h => h.includes('link'));
+    const fi = headers.findIndex(h => h.includes('feed'));
 
     // Build row index map for fast lookup
     const rowMap = {};
     rows.slice(1).forEach((r, i) => {
-      if (r[ni]) rowMap[r[ni].toString().trim().toLowerCase()] = i + 2; // 1-indexed + header
+      if (r[ni]) rowMap[r[ni].toString().trim().toLowerCase()] = i + 2;
     });
 
     let updated = 0;
-    for (const { name, link } of updates) {
+    for (const { name, link, feeds } of updates) {
       const rowNum = rowMap[name.toLowerCase().trim()];
-      if (!rowNum || !link) continue;
-      sheet.getRange(rowNum, li + 1).setValue(link);
+      if (!rowNum) continue;
+      if (link && li >= 0) sheet.getRange(rowNum, li + 1).setValue(link);
+      if (feeds && fi >= 0) sheet.getRange(rowNum, fi + 1).setValue(feeds);
       updated++;
     }
 
@@ -63,9 +67,11 @@ function getWriters() {
   const catIndices = headers.reduce((acc, h, i) => { if (h.includes('cat')) acc.push(i); return acc; }, []);
   const [ci1, ci2, ci3] = [catIndices[0] ?? -1, catIndices[1] ?? -1, catIndices[2] ?? -1];
 
+  const fi = headers.findIndex(h => h.includes('feed'));
   const writers = rows.slice(1).filter(r => r[ni] && r[ni].toString().trim()).map(r => ({
     name: r[ni].toString().trim(),
     link: r[li] ? r[li].toString().trim() : '',
+    feeds: fi >= 0 && r[fi] ? r[fi].toString().trim() : '',
     cat1: ci1 >= 0 && r[ci1] ? r[ci1].toString().trim() : '',
     cat2: ci2 >= 0 && r[ci2] ? r[ci2].toString().trim() : '',
     cat3: ci3 >= 0 && r[ci3] ? r[ci3].toString().trim() : ''
