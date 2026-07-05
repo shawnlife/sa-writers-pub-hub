@@ -12,19 +12,27 @@ const FEED_TIMEOUT_MS = 10000;
 
 const parser = new Parser({ timeout: FEED_TIMEOUT_MS });
 
-// Resolve open.substack.com/users/... URLs by following redirects to get the
-// real @handle, which matches the actual publication subdomain.
-// e.g. /users/211650717-zubayr-charles → substack.com/@zubayrcharles → zubayrcharles.substack.com/feed
+// Resolve open.substack.com/users/ID-slug URLs using the Substack API.
+// The slug in the URL ≠ publication subdomain (e.g. "zubayr-charles" ≠ "zubayrcharles"),
+// so we use the numeric user ID to look up their actual publication via the API.
 async function resolveUsersUrl(link) {
+  const idMatch = link.match(/open\.substack\.com\/users\/(\d+)-/);
+  if (!idMatch) return null;
+  const userId = idMatch[1];
   try {
-    const resp = await fetch(link, {
-      redirect: 'follow',
+    const resp = await fetch(`https://substack.com/api/v1/user/${userId}/public_profile`, {
       signal: AbortSignal.timeout(8000),
       headers: { 'User-Agent': 'Mozilla/5.0' }
     });
-    const finalUrl = resp.url;
-    const m = finalUrl.match(/substack\.com\/@([^/?]+)/);
-    if (m) return `https://${m[1]}.substack.com/feed`;
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    // Primary publication subdomain
+    const subdomain = data?.primaryPublication?.subdomain
+      || data?.publicationUsers?.[0]?.publication?.subdomain;
+    if (subdomain) return `https://${subdomain}.substack.com/feed`;
+    // Fall back to handle if no publication found
+    const handle = data?.handle;
+    if (handle) return `https://${handle}.substack.com/feed`;
   } catch {}
   return null;
 }
@@ -37,7 +45,7 @@ async function slugToFeed(link) {
   // Direct substack URL — subdomain is the feed slug
   const m3 = link.match(/^https?:\/\/([^.]+)\.substack\.com/);
   if (m3 && m3[1] !== 'open') return `https://${m3[1]}.substack.com/feed`;
-  // open.substack.com/users/ID-slug — slug ≠ publication subdomain, must resolve
+  // open.substack.com/users/ID-slug — use API to resolve actual subdomain
   if (link.includes('open.substack.com/users/')) return resolveUsersUrl(link);
   return null;
 }
