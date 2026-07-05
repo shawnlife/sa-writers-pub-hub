@@ -12,12 +12,11 @@ const FEED_TIMEOUT_MS = 10000;
 
 const parser = new Parser({ timeout: FEED_TIMEOUT_MS });
 
-// Resolve open.substack.com/users/ID-slug URLs by scraping the profile page.
-// Substack profile pages are Next.js apps — the __NEXT_DATA__ JSON block in the
-// page HTML contains the user's actual publication subdomain. The slug in the
-// users/ URL ≠ publication subdomain, so we can't guess it directly.
+let _debugCount = 0;
 async function resolveUsersUrl(link) {
-  const cleanLink = link.split('?')[0]; // strip ?utm_source=mentions etc
+  const cleanLink = link.split('?')[0];
+  const isDebug = _debugCount < 2;
+  if (isDebug) _debugCount++;
   try {
     const resp = await fetch(cleanLink, {
       signal: AbortSignal.timeout(12000),
@@ -26,20 +25,25 @@ async function resolveUsersUrl(link) {
         'Accept': 'text/html'
       }
     });
+    if (isDebug) console.log(`  [debug] ${cleanLink} → HTTP ${resp.status}, type: ${resp.headers.get('content-type')}`);
     if (!resp.ok) return null;
     const html = await resp.text();
-    // Extract Next.js page data — always present on Substack profile pages
+    if (isDebug) console.log(`  [debug] HTML length: ${html.length}, has __NEXT_DATA__: ${html.includes('__NEXT_DATA__')}`);
     const match = html.match(/<script id="__NEXT_DATA__" type="application\/json">([^<]+)<\/script>/);
-    if (!match) return null;
+    if (!match) {
+      if (isDebug) console.log(`  [debug] __NEXT_DATA__ not found. First 500 chars: ${html.slice(0, 500)}`);
+      return null;
+    }
     const data = JSON.parse(match[1]);
-    // The publication is nested in props.pageProps — structure varies slightly
     const props = data?.props?.pageProps;
+    if (isDebug) console.log(`  [debug] pageProps keys: ${Object.keys(props || {}).join(', ')}`);
     const subdomain = props?.user?.primaryPublication?.subdomain
       || props?.publication?.subdomain
       || props?.user?.publicationUsers?.[0]?.publication?.subdomain;
+    if (isDebug) console.log(`  [debug] resolved subdomain: ${subdomain}`);
     if (subdomain) return `https://${subdomain}.substack.com/feed`;
-  } catch {
-    return null;
+  } catch (err) {
+    if (isDebug) console.log(`  [debug] threw: ${err.message}`);
   }
   return null;
 }
