@@ -9,7 +9,13 @@ const AS1_URL = 'https://script.google.com/macros/s/AKfycbzvdzFSv5d29zSfe5ddSiD2
 const CONCURRENCY = 10;
 const FEED_TIMEOUT_MS = 10000;
 
-const parser = new Parser({ timeout: FEED_TIMEOUT_MS });
+const parser = new Parser({
+  timeout: FEED_TIMEOUT_MS,
+  headers: {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'application/rss+xml, application/xml, text/xml, */*'
+  }
+});
 
 async function getLastPostDate(feeds) {
   const feedUrls = feeds.split(',').map(f => f.trim()).filter(Boolean);
