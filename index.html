@@ -328,6 +328,7 @@ select:focus,input[type=date]:focus{outline:none;border-color:#e11c47}
     </div>
     <div class="cat-chips-label">Filter by category</div>
     <div class="cat-chips" id="db-cat-chips"></div>
+    <div id="db-cat-add-wrap" style="margin-top:-6px;margin-bottom:10px"></div>
     <div id="db-count" class="db-count"></div>
     <div id="db-table-wrap"></div>
   </div>
@@ -760,7 +761,9 @@ function renderCatChips() {
   if (!container) return;
   container.innerHTML = allCats.map(c =>
     `<button class="cat-chip${dbCatFilters.has(c) ? ' sel' : ''}" onclick="toggleCatFilter('${c.replace(/'/g, "\\'")}')">${escHtml(c)}</button>`
-  ).join('') + `<button class="cat-chip cat-chip-add" onclick="startAddCat(this)" title="Add a new category">+ Add category</button>`;
+  ).join('');
+  const addWrap = $('db-cat-add-wrap');
+  if (addWrap) addWrap.innerHTML = `<button class="cat-chip cat-chip-add" onclick="startAddCat(this)" title="Add a new category">+ Add category</button>`;
 }
 
 function startAddCat(btn) {
