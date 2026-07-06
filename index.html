@@ -110,10 +110,14 @@ select:focus,input[type=date]:focus{outline:none;border-color:#e11c47}
 .db-cats{display:flex;flex-wrap:wrap;gap:4px;padding-top:2px}
 .badge{display:inline-block;padding:2px 7px;background:#f0f0ee;border-radius:20px;font-size:11px;color:#555;white-space:nowrap}
 .db-lp{font-size:12px;font-weight:500;padding-top:2px}
-.db-lp-recent{color:#16a34a} /* ≤ 30 days */
-.db-lp-mid{color:#d97706}    /* 31–90 days */
-.db-lp-old{color:#dc2626}    /* > 90 days */
-.db-lp-none{color:#ccc}      /* no feed / no posts */
+.db-lp-recent{color:#16a34a;font-weight:600} /* ≤ 30 days */
+.db-lp-mid{color:#d97706;font-weight:600}    /* 31–90 days */
+.db-lp-old{color:#dc2626;font-weight:600}    /* > 90 days */
+.db-lp-none{color:#bbb}                      /* no feed / no posts */
+.cat-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:1rem}
+.cat-chip{padding:4px 11px;border-radius:20px;font-size:12px;border:1px solid #e0e0dc;background:#fff;color:#555;cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap}
+.cat-chip:hover{background:#f7f7f5;border-color:#ccc}
+.cat-chip.sel{background:#e11c47;border-color:#e11c47;color:#fff}
 </style>
 </head>
 <body>
@@ -165,11 +169,6 @@ select:focus,input[type=date]:focus{outline:none;border-color:#e11c47}
       </ul>
     </div>
   </details>
-
-  <div class="row" style="margin-bottom:1.25rem">
-    <button class="btn-outline" onclick="openWriterModal('add')">+ Add writer</button>
-    <button class="btn-outline" onclick="openWriterModal('update')">Update writer</button>
-  </div>
 
   <div class="tab-nav">
     <button class="tab-btn active" id="tab-btn-digest" onclick="switchTab('digest')">Digest</button>
@@ -303,11 +302,12 @@ select:focus,input[type=date]:focus{outline:none;border-color:#e11c47}
   </div><!-- end #tab-digest -->
 
   <div id="tab-writers" style="display:none">
+    <div style="display:flex;gap:8px;margin-bottom:1rem">
+      <button class="btn-outline" onclick="openWriterModal('add')">+ Add writer</button>
+      <button class="btn-outline" onclick="openWriterModal('update')">Update writer</button>
+    </div>
     <div class="db-toolbar">
       <input type="text" class="db-search" id="db-search" placeholder="Search writers…" oninput="renderWritersTable()">
-      <select class="db-filter-sel" id="db-cat-filter" onchange="renderWritersTable()">
-        <option value="">All categories</option>
-      </select>
       <select class="db-filter-sel" id="db-lp-filter" onchange="renderWritersTable()">
         <option value="">Any last post</option>
         <option value="7">Last 7 days</option>
@@ -322,6 +322,7 @@ select:focus,input[type=date]:focus{outline:none;border-color:#e11c47}
         <option value="noposts">No posts found</option>
       </select>
     </div>
+    <div class="cat-chips" id="db-cat-chips"></div>
     <div id="db-count" class="db-count"></div>
     <div id="db-table-wrap"></div>
   </div>
@@ -367,9 +368,7 @@ async function loadSheet() {
     const sel = $('cat-filter');
     while (sel.options.length > 1) sel.remove(1);
     allCats.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; sel.appendChild(o); });
-    const dbSel = $('db-cat-filter');
-    while (dbSel.options.length > 1) dbSel.remove(1);
-    allCats.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; dbSel.appendChild(o); });
+    renderCatChips();
 
     ['writer-modal-category','writer-modal-category2','writer-modal-category3'].forEach((id, idx) => {
       const sel = $(id);
@@ -704,8 +703,9 @@ $('d-to').value = maxDate;
 $('d-from').value = twoWeeksAgo.toISOString().split('T')[0];
 loadSheet();
 
-// ─── DB sort state ───────────────────────────────────────────────────────────
+// ─── DB sort + category filter state ─────────────────────────────────────────
 let dbSort = { col: 'name', dir: 1 };
+let dbCatFilters = new Set();
 function setDbSort(col) {
   dbSort.dir = dbSort.col === col ? -dbSort.dir : 1;
   dbSort.col = col;
@@ -723,7 +723,7 @@ function switchTab(tab) {
   $('tab-writers').style.display = tab === 'writers' ? 'block' : 'none';
   $('tab-btn-digest').classList.toggle('active',  tab === 'digest');
   $('tab-btn-writers').classList.toggle('active', tab === 'writers');
-  if (tab === 'writers') renderWritersTable();
+  if (tab === 'writers') { renderCatChips(); renderWritersTable(); }
 }
 
 // ─── Writers database ─────────────────────────────────────────────────────────
@@ -740,15 +740,28 @@ function lpDays(w) {
   return Math.floor((Date.now() - new Date(w.lastPost + 'T12:00:00')) / 86400000);
 }
 
+function renderCatChips() {
+  const container = $('db-cat-chips');
+  if (!container) return;
+  container.innerHTML = allCats.map(c =>
+    `<button class="cat-chip${dbCatFilters.has(c) ? ' sel' : ''}" onclick="toggleCatFilter('${c.replace(/'/g, "\\'")}')">${escHtml(c)}</button>`
+  ).join('');
+}
+
+function toggleCatFilter(cat) {
+  if (dbCatFilters.has(cat)) dbCatFilters.delete(cat); else dbCatFilters.add(cat);
+  renderCatChips();
+  renderWritersTable();
+}
+
 function renderWritersTable() {
   const search       = ($('db-search').value || '').toLowerCase();
-  const catFilter    = $('db-cat-filter').value;
   const lpFilter     = $('db-lp-filter').value;
   const statusFilter = $('db-status-filter').value;
 
   let filtered = writers.filter(w => {
     if (search && !w.name.toLowerCase().includes(search)) return false;
-    if (catFilter && ![w.cat1, w.cat2, w.cat3].includes(catFilter)) return false;
+    if (dbCatFilters.size > 0 && ![w.cat1, w.cat2, w.cat3].some(c => dbCatFilters.has(c))) return false;
     if (statusFilter === 'nofeed'  && w.feeds) return false;
     if (statusFilter === 'nofeed'  && !w.feeds) return true;
     if (statusFilter === 'noposts' && w.lastPost !== 'no posts found') return false;
