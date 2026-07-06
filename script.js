@@ -123,7 +123,7 @@ function getWriters() {
       name:     r[ni].toString().trim(),
       link:     li  >= 0 && r[li]  ? r[li].toString().trim()  : '',
       feeds:    fi  >= 0 && r[fi]  ? r[fi].toString().trim()  : '',
-      lastPost: lpi >= 0 && r[lpi] ? r[lpi].toString().trim() : '',
+      lastPost: lpi >= 0 && r[lpi] ? (r[lpi] instanceof Date ? Utilities.formatDate(r[lpi], Session.getScriptTimeZone(), 'yyyy-MM-dd') : r[lpi].toString().trim()) : '',
       cat1:     ci1 >= 0 && r[ci1] ? r[ci1].toString().trim() : '',
       cat2:     ci2 >= 0 && r[ci2] ? r[ci2].toString().trim() : '',
       cat3:     ci3 >= 0 && r[ci3] ? r[ci3].toString().trim() : ''

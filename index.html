@@ -114,8 +114,9 @@ select:focus,input[type=date]:focus{outline:none;border-color:#e11c47}
 .db-lp-mid{color:#d97706;font-weight:600}    /* 31–90 days */
 .db-lp-old{color:#dc2626;font-weight:600}    /* > 90 days */
 .db-lp-none{color:#bbb}                      /* no feed / no posts */
-.cat-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:1rem}
-.cat-chip{padding:4px 11px;border-radius:20px;font-size:12px;border:1px solid #e0e0dc;background:#fff;color:#555;cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap}
+.cat-chips-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:#888;margin-bottom:5px}
+.cat-chips{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:1rem;max-height:calc(3 * (24px + 4px));overflow:hidden}
+.cat-chip{padding:3px 9px;border-radius:20px;font-size:11px;border:1px solid #e0e0dc;background:#fff;color:#555;cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap;line-height:1.6}
 .cat-chip:hover{background:#f7f7f5;border-color:#ccc}
 .cat-chip.sel{background:#e11c47;border-color:#e11c47;color:#fff}
 </style>
@@ -322,6 +323,7 @@ select:focus,input[type=date]:focus{outline:none;border-color:#e11c47}
         <option value="noposts">No posts found</option>
       </select>
     </div>
+    <div class="cat-chips-label">Filter by category</div>
     <div class="cat-chips" id="db-cat-chips"></div>
     <div id="db-count" class="db-count"></div>
     <div id="db-table-wrap"></div>
@@ -728,16 +730,26 @@ function switchTab(tab) {
 
 // ─── Writers database ─────────────────────────────────────────────────────────
 
-function formatLastPost(str) {
+function parseLastPostDate(str) {
   if (!str || str === 'no posts found' || str === 'no publication') return null;
-  const d = new Date(str + 'T12:00:00');
-  if (isNaN(d)) return null;
+  // Try YYYY-MM-DD first (preferred format from check-feeds.js)
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(str);
+  if (iso) return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+  // Fall back to native Date parsing for any other format Google Sheets might return
+  const d = new Date(str);
+  return isNaN(d) ? null : d;
+}
+
+function formatLastPost(str) {
+  const d = parseLastPostDate(str);
+  if (!d) return null;
   return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 }
 
 function lpDays(w) {
-  if (!w.lastPost || w.lastPost === 'no posts found' || w.lastPost === 'no publication') return null;
-  return Math.floor((Date.now() - new Date(w.lastPost + 'T12:00:00')) / 86400000);
+  const d = parseLastPostDate(w.lastPost);
+  if (!d) return null;
+  return Math.floor((Date.now() - d.getTime()) / 86400000);
 }
 
 function renderCatChips() {
@@ -763,7 +775,6 @@ function renderWritersTable() {
     if (search && !w.name.toLowerCase().includes(search)) return false;
     if (dbCatFilters.size > 0 && ![w.cat1, w.cat2, w.cat3].some(c => dbCatFilters.has(c))) return false;
     if (statusFilter === 'nofeed'  && w.feeds) return false;
-    if (statusFilter === 'nofeed'  && !w.feeds) return true;
     if (statusFilter === 'noposts' && w.lastPost !== 'no posts found') return false;
     const days = lpDays(w);
     if (lpFilter === '7'   && (days === null || days > 7))   return false;
