@@ -53,8 +53,8 @@ function doGet(e) {
 
   // Writer actions
   if (action === 'updateCategory') return updateCategory(p.name, p.category);
-  if (action === 'addWriter')      return addWriter(p.name, p.link, p.category);
-  if (action === 'updateWriter')   return updateWriter(p.originalName, p.name, p.link, p.category);
+  if (action === 'addWriter')      return addWriter(p.name, p.link, p.category, p.cat2, p.cat3, p.feeds);
+  if (action === 'updateWriter')   return updateWriter(p.originalName, p.name, p.link, p.category, p.cat2, p.cat3, p.feeds);
   if (action === 'syncCategories') return syncCategories();
 
   // Default: return full writer list
@@ -174,30 +174,43 @@ function updateCategory(name, category) {
   }
 }
 
-function addWriter(name, link, category) {
+function addWriter(name, link, category, cat2, cat3, feeds) {
   try {
     if (!name?.toString().trim()) return respond({ error: 'Missing name' });
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(WRITERS_SHEET);
     const rows = sheet.getDataRange().getValues();
+    const headers = rows[0].map(h => h.toString().toLowerCase().trim());
     const lower = name.toString().trim().toLowerCase();
     for (let i = 1; i < rows.length; i++) {
       if (rows[i][0]?.toString().trim().toLowerCase() === lower) {
         return respond({ error: 'Writer already exists: ' + name });
       }
     }
-    sheet.appendRow([name.toString().trim(), (link || '').toString().trim(), (category || '').toString().trim()]);
+    // Build a new row aligned to the sheet's header order
+    const newRow = headers.map(h => {
+      if (h.includes('name'))  return name.toString().trim();
+      if (h.includes('link'))  return (link  || '').toString().trim();
+      if (h.includes('feed'))  return (feeds || '').toString().trim();
+      return '';
+    });
+    const catIdx = headers.reduce((a, h, i) => { if (h.includes('cat')) a.push(i); return a; }, []);
+    if (catIdx[0] !== undefined) newRow[catIdx[0]] = (category || '').toString().trim();
+    if (catIdx[1] !== undefined) newRow[catIdx[1]] = (cat2    || '').toString().trim();
+    if (catIdx[2] !== undefined) newRow[catIdx[2]] = (cat3    || '').toString().trim();
+    sheet.appendRow(newRow);
     return respond({ success: true, row: sheet.getLastRow() });
   } catch (e) {
     return respond({ error: e.message });
   }
 }
 
-function updateWriter(originalName, name, link, category) {
+function updateWriter(originalName, name, link, category, cat2, cat3, feeds) {
   try {
     if (!originalName?.toString().trim()) return respond({ error: 'Missing originalName' });
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheet = ss.getSheetByName(WRITERS_SHEET);
     const rows = sheet.getDataRange().getValues();
+    const headers = rows[0].map(h => h.toString().toLowerCase().trim());
     const origLower = originalName.toString().trim().toLowerCase();
 
     let rowIdx = -1;
@@ -207,9 +220,17 @@ function updateWriter(originalName, name, link, category) {
     if (rowIdx === -1) return respond({ error: 'Writer not found: ' + originalName });
 
     const newName = (name || originalName).toString().trim();
-    sheet.getRange(rowIdx, 1).setValue(newName);
-    sheet.getRange(rowIdx, 2).setValue((link || '').toString().trim());
-    sheet.getRange(rowIdx, 3).setValue((category || '').toString().trim());
+    const ni  = headers.findIndex(h => h.includes('name'));
+    const li  = headers.findIndex(h => h.includes('link'));
+    const fi  = headers.findIndex(h => h.includes('feed'));
+    const catIdx = headers.reduce((a, h, i) => { if (h.includes('cat')) a.push(i); return a; }, []);
+
+    if (ni  >= 0) sheet.getRange(rowIdx, ni  + 1).setValue(newName);
+    if (li  >= 0) sheet.getRange(rowIdx, li  + 1).setValue((link  || '').toString().trim());
+    if (fi  >= 0) sheet.getRange(rowIdx, fi  + 1).setValue((feeds || '').toString().trim());
+    if (catIdx[0] !== undefined) sheet.getRange(rowIdx, catIdx[0] + 1).setValue((category || '').toString().trim());
+    if (catIdx[1] !== undefined) sheet.getRange(rowIdx, catIdx[1] + 1).setValue((cat2     || '').toString().trim());
+    if (catIdx[2] !== undefined) sheet.getRange(rowIdx, catIdx[2] + 1).setValue((cat3     || '').toString().trim());
 
     const aSheet = ss.getSheetByName(ARTICLES_SHEET);
     if (aSheet) {

@@ -162,8 +162,20 @@ select:focus,input[type=date]:focus{outline:none;border-color:#e11c47}
         <input type="text" id="writer-modal-link" style="width:100%;font-family:inherit;border:0.5px solid #ddd;border-radius:8px;padding:7px 10px;font-size:13px">
       </div>
       <div class="field" style="margin-bottom:10px">
-        <label>Category</label>
+        <label>Category 1</label>
         <select id="writer-modal-category"><option value="">— uncategorised —</option></select>
+      </div>
+      <div class="field" style="margin-bottom:10px">
+        <label>Category 2 <span style="color:#aaa;font-weight:400">(optional)</span></label>
+        <select id="writer-modal-category2"><option value="">— none —</option></select>
+      </div>
+      <div class="field" style="margin-bottom:10px">
+        <label>Category 3 <span style="color:#aaa;font-weight:400">(optional)</span></label>
+        <select id="writer-modal-category3"><option value="">— none —</option></select>
+      </div>
+      <div class="field" style="margin-bottom:10px">
+        <label>RSS feeds <span style="color:#aaa;font-weight:400">(comma-separated)</span></label>
+        <input type="text" id="writer-modal-feeds" placeholder="e.g. https://name.substack.com/feed" style="width:100%;font-family:inherit;border:0.5px solid #ddd;border-radius:8px;padding:7px 10px;font-size:13px">
       </div>
       <div class="status" id="writer-modal-status"></div>
       <button class="btn-primary" id="writer-modal-save" onclick="saveWriterModal()">Save</button>
@@ -286,9 +298,11 @@ async function loadSheet() {
     while (sel.options.length > 1) sel.remove(1);
     allCats.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; sel.appendChild(o); });
 
-    const modalCatSel = $('writer-modal-category');
-    while (modalCatSel.options.length > 1) modalCatSel.remove(1);
-    allCats.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; modalCatSel.appendChild(o); });
+    ['writer-modal-category','writer-modal-category2','writer-modal-category3'].forEach((id, idx) => {
+      const sel = $(id);
+      while (sel.options.length > 1) sel.remove(1);
+      allCats.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; sel.appendChild(o); });
+    });
 
     const modalWriterSel = $('writer-modal-select');
     modalWriterSel.innerHTML = writers.map(w => `<option value="${w.name.replace(/"/g, '&quot;')}">${w.name}</option>`).join('');
@@ -463,6 +477,9 @@ function openWriterModal(mode) {
   $('writer-modal-name').value = '';
   $('writer-modal-link').value = '';
   $('writer-modal-category').value = '';
+  $('writer-modal-category2').value = '';
+  $('writer-modal-category3').value = '';
+  $('writer-modal-feeds').value = '';
   if (mode === 'add') {
     $('writer-modal-title').textContent = 'Add writer';
     $('writer-modal-select-field').style.display = 'none';
@@ -493,12 +510,18 @@ function onWriterModalSelect() {
   $('writer-modal-name').value = w.name;
   $('writer-modal-link').value = w.link;
   $('writer-modal-category').value = w.cat1;
+  $('writer-modal-category2').value = w.cat2 || '';
+  $('writer-modal-category3').value = w.cat3 || '';
+  $('writer-modal-feeds').value = w.feeds || '';
 }
 
 async function saveWriterModal() {
   const name = $('writer-modal-name').value.trim();
   const link = $('writer-modal-link').value.trim();
   const category = $('writer-modal-category').value;
+  const cat2 = $('writer-modal-category2').value;
+  const cat3 = $('writer-modal-category3').value;
+  const feeds = $('writer-modal-feeds').value.trim();
   if (!name) { $('writer-modal-status').textContent = 'Name is required'; $('writer-modal-status').className = 'status err'; return; }
 
   $('writer-modal-save').disabled = true;
@@ -507,10 +530,10 @@ async function saveWriterModal() {
   try {
     let url;
     if (writerModalMode === 'add') {
-      url = AS1 + '?action=addWriter&name=' + encodeURIComponent(name) + '&link=' + encodeURIComponent(link) + '&category=' + encodeURIComponent(category);
+      url = AS1 + '?action=addWriter&name=' + encodeURIComponent(name) + '&link=' + encodeURIComponent(link) + '&category=' + encodeURIComponent(category) + '&cat2=' + encodeURIComponent(cat2) + '&cat3=' + encodeURIComponent(cat3) + '&feeds=' + encodeURIComponent(feeds);
     } else {
       const originalName = $('writer-modal-select').value;
-      url = AS1 + '?action=updateWriter&originalName=' + encodeURIComponent(originalName) + '&name=' + encodeURIComponent(name) + '&link=' + encodeURIComponent(link) + '&category=' + encodeURIComponent(category);
+      url = AS1 + '?action=updateWriter&originalName=' + encodeURIComponent(originalName) + '&name=' + encodeURIComponent(name) + '&link=' + encodeURIComponent(link) + '&category=' + encodeURIComponent(category) + '&cat2=' + encodeURIComponent(cat2) + '&cat3=' + encodeURIComponent(cat3) + '&feeds=' + encodeURIComponent(feeds);
     }
     const resp = await fetch(url);
     const data = await resp.json();
