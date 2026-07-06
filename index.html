@@ -83,6 +83,31 @@ select:focus,input[type=date]:focus{outline:none;border-color:#e11c47}
 .spinner{display:inline-block;width:12px;height:12px;border:2px solid #e8e8e5;border-top-color:#e11c47;border-radius:50%;animation:spin .7s linear infinite;margin-right:6px;vertical-align:middle}
 @keyframes spin{to{transform:rotate(360deg)}}
 .creating-msg{font-size:13px;color:#666;padding:8px 0;display:none}
+.tab-nav{display:flex;gap:2px;background:#f0f0ee;border-radius:12px;padding:3px;margin-bottom:1.25rem}
+.tab-btn{flex:1;padding:8px;font-size:14px;font-weight:500;border:none;border-radius:9px;background:transparent;color:#888;cursor:pointer;font-family:inherit;transition:all .15s}
+.tab-btn.active{background:#fff;color:#111;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.db-toolbar{display:flex;gap:8px;margin-bottom:1rem}
+.db-search{flex:1;font-family:inherit;border:0.5px solid #ddd;border-radius:8px;padding:8px 12px;font-size:13px;background:#fff;color:#111}
+.db-search:focus{outline:none;border-color:#e11c47}
+.db-cat-sel{font-family:inherit;border:0.5px solid #ddd;border-radius:8px;padding:8px 10px;font-size:13px;background:#fff;color:#111;min-width:180px}
+.db-count{font-size:12px;color:#888;margin-bottom:.6rem}
+.db-table{border:0.5px solid #e8e8e5;border-radius:14px;overflow:hidden;background:#fff}
+.db-hdr{display:grid;grid-template-columns:1fr 1fr 110px;gap:10px;padding:9px 14px;background:#f7f7f5;font-size:11px;font-weight:500;color:#888;text-transform:uppercase;letter-spacing:.06em;border-bottom:0.5px solid #e8e8e5}
+.db-row{display:grid;grid-template-columns:1fr 1fr 110px;gap:10px;padding:11px 14px;border-bottom:0.5px solid #f0f0ee;align-items:center;cursor:pointer;transition:background .1s}
+.db-row:last-child{border-bottom:none}
+.db-row:hover{background:#fdf5f7}
+.db-name{font-size:13px;font-weight:500;color:#111;display:flex;align-items:center;gap:6px}
+.db-name-link{color:#111;text-decoration:none}
+.db-name-link:hover{color:#e11c47;text-decoration:underline}
+.db-edit{font-size:11px;color:#ccc;flex-shrink:0}
+.db-row:hover .db-edit{color:#e11c47}
+.db-cats{display:flex;flex-wrap:wrap;gap:4px}
+.badge{display:inline-block;padding:2px 7px;background:#f0f0ee;border-radius:20px;font-size:11px;color:#555;white-space:nowrap}
+.db-lp{font-size:12px;font-weight:500}
+.db-lp-recent{color:#16a34a}
+.db-lp-mid{color:#d97706}
+.db-lp-old{color:#dc2626}
+.db-lp-none{color:#ccc}
 </style>
 </head>
 <body>
@@ -143,6 +168,11 @@ select:focus,input[type=date]:focus{outline:none;border-color:#e11c47}
     <button class="btn-outline" onclick="openWriterModal('update')">Update writer</button>
   </div>
 
+  <div class="tab-nav">
+    <button class="tab-btn active" id="tab-btn-digest" onclick="switchTab('digest')">Digest</button>
+    <button class="tab-btn" id="tab-btn-writers" onclick="switchTab('writers')">Writers</button>
+  </div>
+
   <div id="writer-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:50;align-items:center;justify-content:center;padding:1rem">
     <div class="card" style="max-width:420px;width:100%;margin:0">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
@@ -200,6 +230,7 @@ select:focus,input[type=date]:focus{outline:none;border-color:#e11c47}
     </div>
   </div>
 
+  <div id="tab-digest">
   <div class="card">
     <div class="card-title">Date range</div>
     <div class="row">
@@ -265,6 +296,19 @@ select:focus,input[type=date]:focus{outline:none;border-color:#e11c47}
       <div class="status" id="copy-status" style="margin-top:6px"></div>
     </div>
   </div>
+  </div><!-- end #tab-digest -->
+
+  <div id="tab-writers" style="display:none">
+    <div class="db-toolbar">
+      <input type="text" class="db-search" id="db-search" placeholder="Search writers…" oninput="renderWritersTable()">
+      <select class="db-cat-sel" id="db-cat-filter" onchange="renderWritersTable()">
+        <option value="">All categories</option>
+      </select>
+    </div>
+    <div id="db-count" class="db-count"></div>
+    <div id="db-table-wrap"></div>
+  </div>
+
 </div>
 <footer style="text-align:center;padding:1.5rem 1rem;font-size:12px;color:#aaa">Tool made using AI vibe-coding by <a href="https://shawnlife.com" target="_blank" style="color:#aaa;text-decoration:underline">ShawnLife</a></footer>
 
@@ -296,14 +340,19 @@ async function loadSheet() {
     writers = data.map(w => ({
       name: (w.name || '').replace(/^['\u2018\u2019]/, '').trim(),
       link: (w.link || '').trim(),
+      feeds: (w.feeds || '').trim(),
+      lastPost: (w.lastPost || '').trim(),
       cat1: (w.cat1 || '').trim(),
       cat2: (w.cat2 || '').trim(),
       cat3: (w.cat3 || '').trim()
     })).filter(w => w.name);
-    allCats = [...new Set(writers.map(w => w.cat1).filter(Boolean))].sort();
+    allCats = [...new Set(writers.flatMap(w => [w.cat1, w.cat2, w.cat3]).filter(Boolean))].sort();
     const sel = $('cat-filter');
     while (sel.options.length > 1) sel.remove(1);
     allCats.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; sel.appendChild(o); });
+    const dbSel = $('db-cat-filter');
+    while (dbSel.options.length > 1) dbSel.remove(1);
+    allCats.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; dbSel.appendChild(o); });
 
     ['writer-modal-category','writer-modal-category2','writer-modal-category3'].forEach((id, idx) => {
       const sel = $(id);
@@ -637,6 +686,82 @@ $('d-to').max = maxDate;
 $('d-to').value = maxDate;
 $('d-from').value = twoWeeksAgo.toISOString().split('T')[0];
 loadSheet();
+
+// ─── Tab switching ────────────────────────────────────────────────────────────
+
+function switchTab(tab) {
+  $('tab-digest').style.display  = tab === 'digest'  ? 'block' : 'none';
+  $('tab-writers').style.display = tab === 'writers' ? 'block' : 'none';
+  $('tab-btn-digest').classList.toggle('active',  tab === 'digest');
+  $('tab-btn-writers').classList.toggle('active', tab === 'writers');
+  if (tab === 'writers') renderWritersTable();
+}
+
+// ─── Writers database ─────────────────────────────────────────────────────────
+
+function renderWritersTable() {
+  const search    = ($('db-search').value || '').toLowerCase();
+  const catFilter = $('db-cat-filter').value;
+
+  let filtered = writers.filter(w => {
+    if (search && !w.name.toLowerCase().includes(search)) return false;
+    if (catFilter && ![w.cat1, w.cat2, w.cat3].includes(catFilter)) return false;
+    return true;
+  }).sort((a, b) => a.name.localeCompare(b.name));
+
+  $('db-count').textContent = `${filtered.length} of ${writers.length} writers`;
+
+  if (!filtered.length) {
+    $('db-table-wrap').innerHTML = '<p class="sec-desc" style="margin-top:.5rem">No writers match.</p>';
+    return;
+  }
+
+  $('db-table-wrap').innerHTML = `
+    <div class="db-table">
+      <div class="db-hdr"><span>Name</span><span>Categories</span><span>Last post</span></div>
+      ${filtered.map(writerRow).join('')}
+    </div>`;
+}
+
+function writerRow(w) {
+  const cats = [w.cat1, w.cat2, w.cat3].filter(Boolean);
+  const escapedName = w.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+
+  const nameHtml = w.link
+    ? `<a class="db-name-link" href="${w.link}" target="_blank" onclick="event.stopPropagation()">${escHtml(w.name)}</a>`
+    : escHtml(w.name);
+
+  let lpClass = 'db-lp-none', lpText = '—';
+  if (!w.feeds) {
+    lpText = 'No feed';
+  } else if (w.lastPost && w.lastPost !== 'no posts found' && w.lastPost !== 'no publication') {
+    const days = Math.floor((Date.now() - new Date(w.lastPost)) / 86400000);
+    lpText  = w.lastPost;
+    lpClass = days <= 30 ? 'db-lp-recent' : days <= 90 ? 'db-lp-mid' : 'db-lp-old';
+  } else if (w.lastPost) {
+    lpText = w.lastPost;
+  }
+
+  return `<div class="db-row" onclick="openWriterModalForRow('${escapedName}')">
+    <div class="db-name">${nameHtml}<span class="db-edit">✎</span></div>
+    <div class="db-cats">${cats.map(c => `<span class="badge">${escHtml(c)}</span>`).join('')}</div>
+    <div class="db-lp ${lpClass}">${lpText}</div>
+  </div>`;
+}
+
+function escHtml(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function openWriterModalForRow(name) {
+  openWriterModal('update');
+  // Pre-select the writer
+  const sel = $('writer-modal-select');
+  for (let i = 0; i < sel.options.length; i++) {
+    if (sel.options[i].value === name) { sel.selectedIndex = i; break; }
+  }
+  onWriterModalSelect();
+}
 </script>
 </body>
 </html>

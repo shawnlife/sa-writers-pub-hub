@@ -112,19 +112,21 @@ function getWriters() {
   const h = rows[0].map(x => x.toString().toLowerCase().trim());
   const ni = h.findIndex(x => x.includes('name'));
   const li = h.findIndex(x => x.includes('link'));
-  const fi = h.findIndex(x => x.includes('feed'));
+  const fi  = h.findIndex(x => x.includes('feed'));
+  const lpi = h.findIndex(x => x.includes('last') && x.includes('post'));
   const catIdx = h.reduce((a, x, i) => { if (x.includes('cat')) a.push(i); return a; }, []);
   const [ci1, ci2, ci3] = [catIdx[0] ?? -1, catIdx[1] ?? -1, catIdx[2] ?? -1];
 
   const writers = rows.slice(1)
     .filter(r => r[ni] && r[ni].toString().trim())
     .map(r => ({
-      name:  r[ni].toString().trim(),
-      link:  li  >= 0 && r[li]  ? r[li].toString().trim()  : '',
-      feeds: fi  >= 0 && r[fi]  ? r[fi].toString().trim()  : '',
-      cat1:  ci1 >= 0 && r[ci1] ? r[ci1].toString().trim() : '',
-      cat2:  ci2 >= 0 && r[ci2] ? r[ci2].toString().trim() : '',
-      cat3:  ci3 >= 0 && r[ci3] ? r[ci3].toString().trim() : ''
+      name:     r[ni].toString().trim(),
+      link:     li  >= 0 && r[li]  ? r[li].toString().trim()  : '',
+      feeds:    fi  >= 0 && r[fi]  ? r[fi].toString().trim()  : '',
+      lastPost: lpi >= 0 && r[lpi] ? r[lpi].toString().trim() : '',
+      cat1:     ci1 >= 0 && r[ci1] ? r[ci1].toString().trim() : '',
+      cat2:     ci2 >= 0 && r[ci2] ? r[ci2].toString().trim() : '',
+      cat3:     ci3 >= 0 && r[ci3] ? r[ci3].toString().trim() : ''
     }));
 
   return ContentService.createTextOutput(JSON.stringify(writers)).setMimeType(ContentService.MimeType.JSON);
