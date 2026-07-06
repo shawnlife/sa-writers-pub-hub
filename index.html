@@ -86,28 +86,34 @@ select:focus,input[type=date]:focus{outline:none;border-color:#e11c47}
 .tab-nav{display:flex;gap:2px;background:#f0f0ee;border-radius:12px;padding:3px;margin-bottom:1.25rem}
 .tab-btn{flex:1;padding:8px;font-size:14px;font-weight:500;border:none;border-radius:9px;background:transparent;color:#888;cursor:pointer;font-family:inherit;transition:all .15s}
 .tab-btn.active{background:#fff;color:#111;box-shadow:0 1px 3px rgba(0,0,0,.08)}
-.db-toolbar{display:flex;gap:8px;margin-bottom:1rem}
-.db-search{flex:1;font-family:inherit;border:0.5px solid #ddd;border-radius:8px;padding:8px 12px;font-size:13px;background:#fff;color:#111}
+.db-toolbar{display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap}
+.db-search{flex:2;min-width:160px;font-family:inherit;border:0.5px solid #ddd;border-radius:8px;padding:8px 12px;font-size:13px;background:#fff;color:#111}
 .db-search:focus{outline:none;border-color:#e11c47}
-.db-cat-sel{font-family:inherit;border:0.5px solid #ddd;border-radius:8px;padding:8px 10px;font-size:13px;background:#fff;color:#111;min-width:180px}
+.db-filter-sel{flex:1;min-width:130px;font-family:inherit;border:0.5px solid #ddd;border-radius:8px;padding:8px 10px;font-size:13px;background:#fff;color:#111}
 .db-count{font-size:12px;color:#888;margin-bottom:.6rem}
-.db-table{border:0.5px solid #e8e8e5;border-radius:14px;overflow:hidden;background:#fff}
-.db-hdr{display:grid;grid-template-columns:minmax(160px,1.4fr) minmax(140px,1fr) minmax(180px,1.6fr) 100px;gap:12px;padding:9px 14px;background:#f7f7f5;font-size:11px;font-weight:500;color:#888;text-transform:uppercase;letter-spacing:.06em;border-bottom:0.5px solid #e8e8e5}
-.db-row{display:grid;grid-template-columns:minmax(160px,1.4fr) minmax(140px,1fr) minmax(180px,1.6fr) 100px;gap:12px;padding:11px 14px;border-bottom:0.5px solid #f0f0ee;align-items:start;cursor:pointer;transition:background .1s}
+.db-table-wrap-inner{border:0.5px solid #e8e8e5;border-radius:14px;overflow:hidden;background:#fff}
+.db-hdr{display:grid;grid-template-columns:minmax(160px,1.4fr) minmax(130px,1fr) minmax(180px,1.6fr) 115px;gap:12px;padding:9px 14px;background:#f7f7f5;font-size:11px;font-weight:500;color:#888;text-transform:uppercase;letter-spacing:.06em;border-bottom:0.5px solid #e8e8e5;position:sticky;top:0;z-index:2}
+.db-sort-hdr{cursor:pointer;user-select:none;display:flex;align-items:center;gap:4px}
+.db-sort-hdr:hover{color:#555}
+.sort-ind{font-size:10px;opacity:.5}
+.db-row{display:grid;grid-template-columns:minmax(160px,1.4fr) minmax(130px,1fr) minmax(180px,1.6fr) 115px;gap:12px;padding:11px 14px;border-bottom:0.5px solid #f0f0ee;align-items:start;cursor:pointer;transition:background .1s}
 .db-row:last-child{border-bottom:none}
 .db-row:hover{background:#fdf5f7}
-.db-name{font-size:13px;font-weight:500;color:#111;display:flex;align-items:center;gap:6px}
+.db-name-cell{display:flex;flex-direction:column;gap:2px}
+.db-name{font-size:13px;font-weight:500;color:#111;display:flex;align-items:center;gap:5px}
 .db-name-link{color:#111;text-decoration:none}
 .db-name-link:hover{color:#e11c47;text-decoration:underline}
+.db-profile-link{font-size:11px;color:#aaa;text-decoration:none}
+.db-profile-link:hover{color:#e11c47;text-decoration:underline}
 .db-edit{font-size:11px;color:#ccc;flex-shrink:0}
 .db-row:hover .db-edit{color:#e11c47}
-.db-cats{display:flex;flex-wrap:wrap;gap:4px}
+.db-cats{display:flex;flex-wrap:wrap;gap:4px;padding-top:2px}
 .badge{display:inline-block;padding:2px 7px;background:#f0f0ee;border-radius:20px;font-size:11px;color:#555;white-space:nowrap}
-.db-lp{font-size:12px;font-weight:500}
-.db-lp-recent{color:#16a34a}
-.db-lp-mid{color:#d97706}
-.db-lp-old{color:#dc2626}
-.db-lp-none{color:#ccc}
+.db-lp{font-size:12px;font-weight:500;padding-top:2px}
+.db-lp-recent{color:#16a34a} /* ≤ 30 days */
+.db-lp-mid{color:#d97706}    /* 31–90 days */
+.db-lp-old{color:#dc2626}    /* > 90 days */
+.db-lp-none{color:#ccc}      /* no feed / no posts */
 </style>
 </head>
 <body>
@@ -116,52 +122,49 @@ select:focus,input[type=date]:focus{outline:none;border-color:#e11c47}
   <div class="header">
     <div class="header-text">
       <h1>Writing Digest Generator for SA Writers' Pub Hub</h1>
-      <div class="quick-links">
-        <a class="quick-link" href="https://docs.google.com/spreadsheets/d/11VMjloWhg9qJNfUMMTTAdLQkqt7DqoU8cvoBmxx1WEk/edit" target="_blank">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-          Writer &amp; article database
-        </a>
-        <a class="quick-link" href="https://docs.google.com/document/d/1c865BZua0CQ1WkOCvoIgjLbn9Gx7MqrMQ_G4Kpm3mp4/edit" target="_blank">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-          Digests
-        </a>
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:1.25rem">
+        <div class="quick-links" style="margin-bottom:0">
+          <a class="quick-link" href="https://docs.google.com/spreadsheets/d/11VMjloWhg9qJNfUMMTTAdLQkqt7DqoU8cvoBmxx1WEk/edit" target="_blank">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+            Google Sheet
+          </a>
+          <a class="quick-link" href="https://docs.google.com/document/d/1c865BZua0CQ1WkOCvoIgjLbn9Gx7MqrMQ_G4Kpm3mp4/edit" target="_blank">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            Google Doc
+          </a>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#666">
+          <div class="dot spin" id="dot"></div>
+          <span id="sheet-lbl">Loading…</span>
+          <button class="refresh-btn" onclick="loadSheet()">↻ Refresh</button>
+        </div>
       </div>
     </div>
     <div class="flag">🇿🇦</div>
   </div>
 
   <details class="help">
-    <summary>Introduction &amp; need help?</summary>
+    <summary>How to use this tool</summary>
     <div class="help-body">
-      <p>This tool replaces manually checking ~400 Substack writers' pages each digest. There's a database behind the scenes that gets populated every morning with whatever each writer has posted, so generating a digest here is nearly instant.</p>
+      <p>This tool replaces manually checking ~400 Substack writers' pages each digest. The database updates every morning with whatever each writer posted the day before — generating a digest is nearly instant.</p>
 
-      <p style="color:#e11c47"><strong>⚠ Don't include today's date in your digest.</strong> The database only updates each morning with the previous day's articles, so today's posts won't be in there yet — only pick dates up to yesterday.</p>
+      <p style="color:#e11c47"><strong>⚠ Don't include today's date.</strong> The database only syncs overnight, so today's posts won't be in there yet — pick dates up to yesterday.</p>
 
-      <h4>Add / update a writer</h4>
+      <h4>Writers tab</h4>
       <ul>
-        <li><strong>+ Add writer</strong> — add someone new with their name, Substack link, and category.</li>
-        <li><strong>Update writer</strong> — pick an existing writer to fix their name, link, or category. If you rename someone, their past articles are relinked automatically.</li>
+        <li>Browse, search, and filter all writers. Click any row to edit that writer.</li>
+        <li>Use <strong>+ Add writer</strong> to add someone new. Set their <strong>Substack profile link</strong> (format: <code>substack.com/@username</code>) and their <strong>Publication RSS feeds</strong> (format: <code>username.substack.com/feed</code>, comma-separate if they have multiple publications).</li>
+        <li>Last post colours: <span style="color:#16a34a">green</span> = posted in the last 30 days, <span style="color:#d97706">amber</span> = 31–90 days ago, <span style="color:#dc2626">red</span> = over 90 days ago, grey = no feed or no posts found.</li>
       </ul>
 
-      <h4>Generate a digest</h4>
+      <h4>Digest tab</h4>
       <ul>
-        <li>Pick a date range and (optionally) a single category, then click <strong>Generate digest</strong>.</li>
-        <li>Any writer who published but has no category yet will show up in the <strong>Uncategorised writers</strong> panel — assign one and click <strong>Save to sheet</strong>. This updates both the writer list and the article database.</li>
-      </ul>
-
-      <h4>Creating the digest</h4>
-      <ul>
-        <li><strong>Create digest</strong> builds the digest and shows it inline for review. You can copy it straight into Substack or open the Google Doc archive.</li>
-        <li><strong>Copy digest for Substack</strong> copies a ready-to-paste version: writer names in bold, article titles as plain links, category photos with credits where available. Paste it straight into a new Substack post.</li>
+        <li>Pick a date range on the left and a digest type on the right, then click <strong>Generate digest</strong>.</li>
+        <li>Writers who published but have no category will appear in the <strong>Uncategorised writers</strong> panel — assign a category and save. Changes write back to the sheet immediately.</li>
+        <li>Click <strong>Create digest</strong> to build the formatted digest. Review and edit it inline, then either <strong>Copy for Substack</strong> (paste straight into a new post) or <strong>Open in Google Docs</strong> to access the archived copy.</li>
       </ul>
     </div>
   </details>
-
-  <div class="sheet-bar">
-    <div class="dot spin" id="dot"></div>
-    <span class="sheet-lbl" id="sheet-lbl">Loading writer list…</span>
-    <button class="refresh-btn" onclick="loadSheet()">↻ Refresh</button>
-  </div>
 
   <div class="row" style="margin-bottom:1.25rem">
     <button class="btn-outline" onclick="openWriterModal('add')">+ Add writer</button>
@@ -231,19 +234,20 @@ select:focus,input[type=date]:focus{outline:none;border-color:#e11c47}
   </div>
 
   <div id="tab-digest">
-  <div class="card">
-    <div class="card-title">Date range</div>
-    <div class="row">
-      <div class="field"><label>From</label><input type="date" id="d-from"/></div>
-      <div class="field"><label>To</label><input type="date" id="d-to"/></div>
+  <div style="display:flex;gap:12px;margin-bottom:1rem">
+    <div class="card" style="flex:1;margin-bottom:0">
+      <div class="card-title">Date range</div>
+      <div class="row">
+        <div class="field"><label>From</label><input type="date" id="d-from"/></div>
+        <div class="field"><label>To</label><input type="date" id="d-to"/></div>
+      </div>
     </div>
-  </div>
-
-  <div class="card">
-    <div class="card-title">Digest type</div>
-    <div class="field">
-      <label>Generate</label>
-      <select id="cat-filter"><option value="__all__">Full digest — all categories</option></select>
+    <div class="card" style="flex:1;margin-bottom:0">
+      <div class="card-title">Digest type</div>
+      <div class="field">
+        <label>Generate</label>
+        <select id="cat-filter"><option value="__all__">Full digest — all categories</option></select>
+      </div>
     </div>
   </div>
 
@@ -301,8 +305,21 @@ select:focus,input[type=date]:focus{outline:none;border-color:#e11c47}
   <div id="tab-writers" style="display:none">
     <div class="db-toolbar">
       <input type="text" class="db-search" id="db-search" placeholder="Search writers…" oninput="renderWritersTable()">
-      <select class="db-cat-sel" id="db-cat-filter" onchange="renderWritersTable()">
+      <select class="db-filter-sel" id="db-cat-filter" onchange="renderWritersTable()">
         <option value="">All categories</option>
+      </select>
+      <select class="db-filter-sel" id="db-lp-filter" onchange="renderWritersTable()">
+        <option value="">Any last post</option>
+        <option value="7">Last 7 days</option>
+        <option value="30">Last 30 days</option>
+        <option value="90">Last 90 days</option>
+        <option value="365">Last year</option>
+        <option value="old">Older than 1 year</option>
+      </select>
+      <select class="db-filter-sel" id="db-status-filter" onchange="renderWritersTable()">
+        <option value="">All writers</option>
+        <option value="nofeed">No publication feed</option>
+        <option value="noposts">No posts found</option>
       </select>
     </div>
     <div id="db-count" class="db-count"></div>
@@ -687,6 +704,18 @@ $('d-to').value = maxDate;
 $('d-from').value = twoWeeksAgo.toISOString().split('T')[0];
 loadSheet();
 
+// ─── DB sort state ───────────────────────────────────────────────────────────
+let dbSort = { col: 'name', dir: 1 };
+function setDbSort(col) {
+  dbSort.dir = dbSort.col === col ? -dbSort.dir : 1;
+  dbSort.col = col;
+  renderWritersTable();
+}
+function sortInd(col) {
+  if (dbSort.col !== col) return '';
+  return `<span class="sort-ind">${dbSort.dir === 1 ? '▲' : '▼'}</span>`;
+}
+
 // ─── Tab switching ────────────────────────────────────────────────────────────
 
 function switchTab(tab) {
@@ -699,15 +728,48 @@ function switchTab(tab) {
 
 // ─── Writers database ─────────────────────────────────────────────────────────
 
+function formatLastPost(str) {
+  if (!str || str === 'no posts found' || str === 'no publication') return null;
+  const d = new Date(str + 'T12:00:00');
+  if (isNaN(d)) return null;
+  return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+}
+
+function lpDays(w) {
+  if (!w.lastPost || w.lastPost === 'no posts found' || w.lastPost === 'no publication') return null;
+  return Math.floor((Date.now() - new Date(w.lastPost + 'T12:00:00')) / 86400000);
+}
+
 function renderWritersTable() {
-  const search    = ($('db-search').value || '').toLowerCase();
-  const catFilter = $('db-cat-filter').value;
+  const search       = ($('db-search').value || '').toLowerCase();
+  const catFilter    = $('db-cat-filter').value;
+  const lpFilter     = $('db-lp-filter').value;
+  const statusFilter = $('db-status-filter').value;
 
   let filtered = writers.filter(w => {
     if (search && !w.name.toLowerCase().includes(search)) return false;
     if (catFilter && ![w.cat1, w.cat2, w.cat3].includes(catFilter)) return false;
+    if (statusFilter === 'nofeed'  && w.feeds) return false;
+    if (statusFilter === 'nofeed'  && !w.feeds) return true;
+    if (statusFilter === 'noposts' && w.lastPost !== 'no posts found') return false;
+    const days = lpDays(w);
+    if (lpFilter === '7'   && (days === null || days > 7))   return false;
+    if (lpFilter === '30'  && (days === null || days > 30))  return false;
+    if (lpFilter === '90'  && (days === null || days > 90))  return false;
+    if (lpFilter === '365' && (days === null || days > 365)) return false;
+    if (lpFilter === 'old' && (days === null || days <= 365)) return false;
     return true;
-  }).sort((a, b) => a.name.localeCompare(b.name));
+  });
+
+  // Sort
+  filtered.sort((a, b) => {
+    if (dbSort.col === 'lastPost') {
+      const ad = lpDays(a) ?? Infinity, bd = lpDays(b) ?? Infinity;
+      return dbSort.dir * (ad - bd);
+    }
+    if (dbSort.col === 'cat') return dbSort.dir * (a.cat1 || '').localeCompare(b.cat1 || '');
+    return dbSort.dir * a.name.localeCompare(b.name);
+  });
 
   $('db-count').textContent = `${filtered.length} of ${writers.length} writers`;
 
@@ -717,8 +779,13 @@ function renderWritersTable() {
   }
 
   $('db-table-wrap').innerHTML = `
-    <div class="db-table">
-      <div class="db-hdr"><span>Name</span><span>Categories</span><span>Publications</span><span>Last post</span></div>
+    <div class="db-table-wrap-inner">
+      <div class="db-hdr">
+        <span class="db-sort-hdr" onclick="setDbSort('name')">Name ${sortInd('name')}</span>
+        <span class="db-sort-hdr" onclick="setDbSort('cat')">Categories ${sortInd('cat')}</span>
+        <span>Publications</span>
+        <span class="db-sort-hdr" onclick="setDbSort('lastPost')">Last post ${sortInd('lastPost')}</span>
+      </div>
       ${filtered.map(writerRow).join('')}
     </div>`;
 }
@@ -727,16 +794,18 @@ function writerRow(w) {
   const cats = [w.cat1, w.cat2, w.cat3].filter(Boolean);
   const escapedName = w.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
-  const nameHtml = w.link
-    ? `<a class="db-name-link" href="${w.link}" target="_blank" onclick="event.stopPropagation()">${escHtml(w.name)}</a>`
-    : escHtml(w.name);
+  const profileShort = w.link ? w.link.replace(/^https?:\/\//, '') : '';
+  const profileHtml = w.link
+    ? `<a class="db-profile-link" href="${w.link}" target="_blank" onclick="event.stopPropagation()">${profileShort}</a>`
+    : '';
 
+  const days = lpDays(w);
+  const formatted = formatLastPost(w.lastPost);
   let lpClass = 'db-lp-none', lpText = '—';
   if (!w.feeds) {
     lpText = 'No feed';
-  } else if (w.lastPost && w.lastPost !== 'no posts found' && w.lastPost !== 'no publication') {
-    const days = Math.floor((Date.now() - new Date(w.lastPost)) / 86400000);
-    lpText  = w.lastPost;
+  } else if (formatted) {
+    lpText  = formatted;
     lpClass = days <= 30 ? 'db-lp-recent' : days <= 90 ? 'db-lp-mid' : 'db-lp-old';
   } else if (w.lastPost) {
     lpText = w.lastPost;
@@ -746,12 +815,15 @@ function writerRow(w) {
     ? w.feeds.split(',').map(f => {
         const url = f.trim();
         const label = url.replace(/^https?:\/\//, '').replace(/\/feed\/?$/, '');
-        return `<a href="${url}" target="_blank" onclick="event.stopPropagation()" style="display:block;font-size:12px;color:#e11c47;text-decoration:none;line-height:1.6" title="${url}">${label}</a>`;
+        return `<a href="${url}" target="_blank" onclick="event.stopPropagation()" style="display:block;font-size:12px;color:#e11c47;text-decoration:none;line-height:1.7">${label}</a>`;
       }).join('')
-    : '<span style="font-size:12px;color:#ccc">No feed</span>';
+    : '<span style="font-size:12px;color:#ccc">—</span>';
 
   return `<div class="db-row" onclick="openWriterModalForRow('${escapedName}')">
-    <div class="db-name">${nameHtml}<span class="db-edit">✎</span></div>
+    <div class="db-name-cell">
+      <div class="db-name"><span>${escHtml(w.name)}</span><span class="db-edit">✎</span></div>
+      ${profileHtml}
+    </div>
     <div class="db-cats">${cats.map(c => `<span class="badge">${escHtml(c)}</span>`).join('')}</div>
     <div>${feedLinks}</div>
     <div class="db-lp ${lpClass}">${lpText}</div>
