@@ -8,7 +8,7 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro Text','Helvetica Neue',Arial,sans-serif;color:#111;background:#fff}
-.outer{padding:1.5rem 2rem;max-width:680px;margin:0 auto}
+.outer{padding:1.5rem 2.5rem;max-width:min(1100px,92vw);margin:0 auto}
 .header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:1rem}
 .header-text h1{font-size:23px;font-weight:600;color:#111;margin-bottom:10px;line-height:1.3}
 .flag{width:38px;height:38px;border-radius:50%;flex-shrink:0;border:1.5px solid #eee;display:flex;align-items:center;justify-content:center;font-size:20px}
@@ -92,8 +92,8 @@ select:focus,input[type=date]:focus{outline:none;border-color:#e11c47}
 .db-cat-sel{font-family:inherit;border:0.5px solid #ddd;border-radius:8px;padding:8px 10px;font-size:13px;background:#fff;color:#111;min-width:180px}
 .db-count{font-size:12px;color:#888;margin-bottom:.6rem}
 .db-table{border:0.5px solid #e8e8e5;border-radius:14px;overflow:hidden;background:#fff}
-.db-hdr{display:grid;grid-template-columns:1fr 1fr 110px;gap:10px;padding:9px 14px;background:#f7f7f5;font-size:11px;font-weight:500;color:#888;text-transform:uppercase;letter-spacing:.06em;border-bottom:0.5px solid #e8e8e5}
-.db-row{display:grid;grid-template-columns:1fr 1fr 110px;gap:10px;padding:11px 14px;border-bottom:0.5px solid #f0f0ee;align-items:center;cursor:pointer;transition:background .1s}
+.db-hdr{display:grid;grid-template-columns:minmax(160px,1.4fr) minmax(140px,1fr) minmax(180px,1.6fr) 100px;gap:12px;padding:9px 14px;background:#f7f7f5;font-size:11px;font-weight:500;color:#888;text-transform:uppercase;letter-spacing:.06em;border-bottom:0.5px solid #e8e8e5}
+.db-row{display:grid;grid-template-columns:minmax(160px,1.4fr) minmax(140px,1fr) minmax(180px,1.6fr) 100px;gap:12px;padding:11px 14px;border-bottom:0.5px solid #f0f0ee;align-items:start;cursor:pointer;transition:background .1s}
 .db-row:last-child{border-bottom:none}
 .db-row:hover{background:#fdf5f7}
 .db-name{font-size:13px;font-weight:500;color:#111;display:flex;align-items:center;gap:6px}
@@ -188,8 +188,8 @@ select:focus,input[type=date]:focus{outline:none;border-color:#e11c47}
         <input type="text" id="writer-modal-name" style="width:100%;font-family:inherit;border:0.5px solid #ddd;border-radius:8px;padding:7px 10px;font-size:13px">
       </div>
       <div class="field" style="margin-bottom:10px">
-        <label>Substack link</label>
-        <input type="text" id="writer-modal-link" style="width:100%;font-family:inherit;border:0.5px solid #ddd;border-radius:8px;padding:7px 10px;font-size:13px">
+        <label>Substack profile link <span style="color:#aaa;font-weight:400">— format: substack.com/@username</span></label>
+        <input type="text" id="writer-modal-link" placeholder="https://substack.com/@username" style="width:100%;font-family:inherit;border:0.5px solid #ddd;border-radius:8px;padding:7px 10px;font-size:13px">
       </div>
       <div class="field" style="margin-bottom:10px">
         <label>Category 1</label>
@@ -204,8 +204,8 @@ select:focus,input[type=date]:focus{outline:none;border-color:#e11c47}
         <select id="writer-modal-category3"><option value="">— none —</option></select>
       </div>
       <div class="field" style="margin-bottom:10px">
-        <label>RSS feeds <span style="color:#aaa;font-weight:400">(comma-separated)</span></label>
-        <input type="text" id="writer-modal-feeds" placeholder="e.g. https://name.substack.com/feed" style="width:100%;font-family:inherit;border:0.5px solid #ddd;border-radius:8px;padding:7px 10px;font-size:13px">
+        <label>Publication RSS feeds <span style="color:#aaa;font-weight:400">— format: username.substack.com/feed (comma-separate multiple)</span></label>
+        <input type="text" id="writer-modal-feeds" placeholder="https://username.substack.com/feed" style="width:100%;font-family:inherit;border:0.5px solid #ddd;border-radius:8px;padding:7px 10px;font-size:13px">
       </div>
       <div class="status" id="writer-modal-status"></div>
       <button class="btn-primary" id="writer-modal-save" onclick="saveWriterModal()">Save</button>
@@ -718,7 +718,7 @@ function renderWritersTable() {
 
   $('db-table-wrap').innerHTML = `
     <div class="db-table">
-      <div class="db-hdr"><span>Name</span><span>Categories</span><span>Last post</span></div>
+      <div class="db-hdr"><span>Name</span><span>Categories</span><span>Publications</span><span>Last post</span></div>
       ${filtered.map(writerRow).join('')}
     </div>`;
 }
@@ -742,9 +742,18 @@ function writerRow(w) {
     lpText = w.lastPost;
   }
 
+  const feedLinks = w.feeds
+    ? w.feeds.split(',').map(f => {
+        const url = f.trim();
+        const label = url.replace(/^https?:\/\//, '').replace(/\/feed\/?$/, '');
+        return `<a href="${url}" target="_blank" onclick="event.stopPropagation()" style="display:block;font-size:12px;color:#e11c47;text-decoration:none;line-height:1.6" title="${url}">${label}</a>`;
+      }).join('')
+    : '<span style="font-size:12px;color:#ccc">No feed</span>';
+
   return `<div class="db-row" onclick="openWriterModalForRow('${escapedName}')">
     <div class="db-name">${nameHtml}<span class="db-edit">✎</span></div>
     <div class="db-cats">${cats.map(c => `<span class="badge">${escHtml(c)}</span>`).join('')}</div>
+    <div>${feedLinks}</div>
     <div class="db-lp ${lpClass}">${lpText}</div>
   </div>`;
 }
