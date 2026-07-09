@@ -366,15 +366,18 @@ function syncRSS() {
   // Dedup set
   const existingUrls = new Set(toKeep.slice(1).map(r => r[3]?.toString().trim()).filter(Boolean));
 
-  // Parse and collect new articles
+  // Parse and collect new articles; track each writer's most recent post
   const newRows = [];
+  const latestByName = {};
   let fetched = 0, failed = 0;
   for (let i = 0; i < responses.length; i++) {
     const { name, cat, url } = tasks[i];
     const resp = responses[i];
     if (!resp || resp.getResponseCode() !== 200) { failed++; continue; }
     fetched++;
+    if (!(name in latestByName)) latestByName[name] = null; // feed reachable, may have no posts
     for (const item of parseRSS(resp.getContentText())) {
+      if (item.pubDate && (!latestByName[name] || item.pubDate > latestByName[name])) latestByName[name] = item.pubDate;
       if (!item.url || existingUrls.has(item.url) || !item.pubDate || item.pubDate < cutoff) continue;
       newRows.push([name, cat, item.title || '', item.url, item.pubDate]);
       existingUrls.add(item.url);
@@ -384,6 +387,20 @@ function syncRSS() {
   if (newRows.length > 0) {
     articlesSheet.getRange(articlesSheet.getLastRow() + 1, 1, newRows.length, 5).setValues(newRows);
   }
+
+  // Refresh the Last Post column so it never goes stale
+  const lpi = wh.findIndex(x => x.includes('last'));
+  if (lpi >= 0) {
+    const tz = Session.getScriptTimeZone();
+    for (let i = 1; i < wRows.length; i++) {
+      const name = wRows[i][ni]?.toString().trim();
+      if (!name || !(name in latestByName)) continue; // no feed fetched this run — leave as is
+      const latest = latestByName[name];
+      const val = latest ? Utilities.formatDate(latest, tz, 'yyyy-MM-dd') : 'no posts found';
+      if (wRows[i][lpi]?.toString() !== val) writersSheet.getRange(i + 1, lpi + 1).setValue(val);
+    }
+  }
+
   console.log(`Sync done. ${fetched} feeds OK, ${failed} failed. Added ${newRows.length} articles.`);
 }
 
