@@ -248,8 +248,19 @@ select:focus,input[type=date]:focus{outline:none;border-color:#e11c47}
     <div class="card" style="flex:1;margin-bottom:0">
       <div class="card-title">Digest type</div>
       <div class="field">
-        <label>Generate</label>
-        <select id="cat-filter"><option value="__all__">Full digest — all categories</option></select>
+        <label>Digest</label>
+        <select id="digest-filter" onchange="if(this.value)$('cat-filter').value='__all__'">
+          <option value="">Full digest — all categories</option>
+          <option value="Arts">Arts Digest</option>
+          <option value="Business">Business Digest</option>
+          <option value="Personal">Personal Digest</option>
+          <option value="Politics">Politics Digest</option>
+          <option value="Our World">Our World Digest</option>
+        </select>
+      </div>
+      <div class="field" style="margin-top:8px">
+        <label>Or a single category</label>
+        <select id="cat-filter" onchange="if(this.value!=='__all__')$('digest-filter').value=''"><option value="__all__">— none, use digest above —</option></select>
       </div>
     </div>
   </div>
@@ -277,9 +288,9 @@ select:focus,input[type=date]:focus{outline:none;border-color:#e11c47}
 
     <div id="multicat-section" style="display:none">
       <div class="sec-title">Writers with multiple categories</div>
-      <p class="sec-desc">These writers are tagged under more than one category. Choose where their articles should appear in this digest — defaults to their primary category.</p>
+      <p class="sec-desc">These writers are tagged under more than one category. Click an article title to read it, then choose which category it belongs to. Your choice is saved to the article database when you create the digest.</p>
       <div class="uncat-card">
-        <div class="uncat-hdr">Writer · Articles · File under</div>
+        <div class="uncat-hdr">Writer · Article · File under</div>
         <div id="multicat-list"></div>
       </div>
     </div>
@@ -402,6 +413,7 @@ async function generate() {
   const fromD = new Date(fv + 'T00:00:00'), toD = new Date(tv + 'T23:59:59');
   if (fromD > toD) { alert('Start date must be before end date.'); return; }
   const catFilter = $('cat-filter').value;
+  const digest = $('digest-filter').value;
 
   isRunning = true;
   $('gen-btn').disabled = true; $('doc-btn').disabled = true;
@@ -413,12 +425,12 @@ async function generate() {
   setStatus('Querying article database…');
 
   try {
-    const url = AS2 + '?action=preview&from=' + encodeURIComponent(fv) + '&to=' + encodeURIComponent(tv) + '&cat=' + encodeURIComponent(catFilter);
+    const url = AS2 + '?action=preview&from=' + encodeURIComponent(fv) + '&to=' + encodeURIComponent(tv) + '&cat=' + encodeURIComponent(catFilter) + '&digest=' + encodeURIComponent(digest);
     const resp = await fetch(url, { signal: AbortSignal.timeout(30000) });
     const data = await resp.json();
     if (!data.success) throw new Error(data.error || 'Unknown error');
 
-    lastResults = { fv, tv, catFilter };
+    lastResults = { fv, tv, catFilter, digest };
     $('sn-w').textContent = data.writers || 0;
     $('sn-a').textContent = data.articles || 0;
     $('sn-c').textContent = data.categories || 0;
@@ -444,19 +456,25 @@ function buildMulticatSection(multicatList) {
   const list = $('multicat-list');
   list.innerHTML = '';
   multicatList.forEach(({ name, cats, articles }) => {
-    const div = document.createElement('div'); div.className = 'uncat-row';
-    const nameDiv = document.createElement('div'); nameDiv.className = 'uncat-name'; nameDiv.textContent = name;
-    const artsDiv = document.createElement('div'); artsDiv.className = 'uncat-arts';
-    artsDiv.innerHTML = (articles || []).map(a => `<a href="${a.url}" target="_blank">${a.title}</a>`).join('');
-    const selDiv = document.createElement('div'); selDiv.className = 'uncat-sel';
-    const sel = document.createElement('select');
-    sel.style.cssText = 'font-size:12px;width:100%';
-    sel.innerHTML = (cats || []).map((c, i) => `<option value="${c}"${i === 0 ? ' selected' : ''}>${c}${i === 0 ? ' (primary)' : ''}</option>`).join('');
-    multicatOverrides[name] = cats[0]; // default to primary
-    sel.addEventListener('change', e => { multicatOverrides[name] = e.target.value; });
-    selDiv.appendChild(sel);
-    div.appendChild(nameDiv); div.appendChild(artsDiv); div.appendChild(selDiv);
-    list.appendChild(div);
+    (articles || []).forEach((a, ai) => {
+      const div = document.createElement('div'); div.className = 'uncat-row';
+      const nameDiv = document.createElement('div'); nameDiv.className = 'uncat-name';
+      nameDiv.textContent = ai === 0 ? name : '';
+      const artsDiv = document.createElement('div'); artsDiv.className = 'uncat-arts';
+      artsDiv.innerHTML = `<a href="${a.url}" target="_blank">${a.title}</a>`;
+      const selDiv = document.createElement('div'); selDiv.className = 'uncat-sel';
+      const sel = document.createElement('select');
+      sel.style.cssText = 'font-size:12px;width:100%';
+      const current = a.current || cats[0];
+      sel.innerHTML = (cats || []).map(c => `<option value="${c}"${c === current ? ' selected' : ''}>${c}</option>`).join('');
+      sel.addEventListener('change', e => {
+        if (e.target.value === current) delete multicatOverrides[a.url];
+        else multicatOverrides[a.url] = e.target.value;
+      });
+      selDiv.appendChild(sel);
+      div.appendChild(nameDiv); div.appendChild(artsDiv); div.appendChild(selDiv);
+      list.appendChild(div);
+    });
   });
 }
 
@@ -505,7 +523,7 @@ function buildUncatSection(uncatList) {
 
 async function createDoc() {
   if (!lastResults) return;
-  const { fv, tv, catFilter } = lastResults;
+  const { fv, tv, catFilter, digest } = lastResults;
   $('doc-btn').disabled = true;
   $('doc-status').textContent = '';
   $('doc-status').className = 'status';
@@ -513,7 +531,7 @@ async function createDoc() {
   $('creating-msg').style.display = 'block';
 
   try {
-    const url = AS2 + '?action=createDigest&from=' + encodeURIComponent(fv) + '&to=' + encodeURIComponent(tv) + '&cat=' + encodeURIComponent(catFilter) + '&overrides=' + encodeURIComponent(JSON.stringify(multicatOverrides));
+    const url = AS2 + '?action=createDigest&from=' + encodeURIComponent(fv) + '&to=' + encodeURIComponent(tv) + '&cat=' + encodeURIComponent(catFilter) + '&digest=' + encodeURIComponent(digest || '') + '&overrides=' + encodeURIComponent(JSON.stringify(multicatOverrides));
     const resp = await fetch(url, { signal: AbortSignal.timeout(120000) });
     const data = await resp.json();
     $('creating-msg').style.display = 'none';

@@ -20,21 +20,30 @@ const DAYS_TO_KEEP   = 90;
 const NAME_COLOR    = '#e11c47';
 const ARTICLE_COLOR = '#000000';
 
+// The 5 digests and their sub-sections, in Jen's publishing order
+const DIGESTS = {
+  'Arts':      ['Arts & Culture', 'Books, Writing & Literature', 'Fiction', 'Poetry'],
+  'Business':  ['Business, Work & Economics', 'Tech & AI', 'Trade & Industry'],
+  'Personal':  ['Birth, Fertility & Parenting', 'Personal Essay & Memoir', 'Relationships'],
+  'Politics':  ['Education', 'Feminism, Gender & LGBTQI+', 'History', 'Politics, Media & Government', 'Religion, Spirituality & Theology'],
+  'Our World': ['Climate, Environment & Sustainability', 'Science', 'Sports & Fitness', 'Travel & Food']
+};
+
 const CATEGORY_IMAGES = {
   'Arts & Culture':                  { url: 'https://images.unsplash.com/photo-1587731556938-38755b4803a6?auto=format&fit=crop&w=1080&q=80', photographer: 'Clay Banks', photographerUrl: 'https://unsplash.com/@claybanks' },
-  'Birth Fertility & Parenting':     { url: 'https://images.unsplash.com/photo-1543346242-2b8e41fb91ca?auto=format&fit=crop&w=1080&q=80', photographer: 'charlesdeluvio', photographerUrl: 'https://unsplash.com/@charlesdeluvio' },
-  'Climate Environment & Sustainability': { url: 'https://images.unsplash.com/photo-1720021893364-20fb17efc639?auto=format&fit=crop&w=1080&q=80', photographer: 'Javier Miranda', photographerUrl: 'https://unsplash.com/@nuvaproductions' },
+  'Birth, Fertility & Parenting':    { url: 'https://images.unsplash.com/photo-1543346242-2b8e41fb91ca?auto=format&fit=crop&w=1080&q=80', photographer: 'charlesdeluvio', photographerUrl: 'https://unsplash.com/@charlesdeluvio' },
+  'Climate, Environment & Sustainability': { url: 'https://images.unsplash.com/photo-1720021893364-20fb17efc639?auto=format&fit=crop&w=1080&q=80', photographer: 'Javier Miranda', photographerUrl: 'https://unsplash.com/@nuvaproductions' },
   'Education':                       { url: 'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?auto=format&fit=crop&w=1080&q=80', photographer: 'Element5 Digital', photographerUrl: 'https://unsplash.com/@element5digital' },
-  'Feminism Gender & LGBTQI+':       { url: 'https://images.unsplash.com/photo-1548383675-379abfac2c41?auto=format&fit=crop&w=1080&q=80', photographer: 'chloe s.', photographerUrl: 'https://unsplash.com/@chloesimpson' },
+  'Feminism, Gender & LGBTQI+':      { url: 'https://images.unsplash.com/photo-1548383675-379abfac2c41?auto=format&fit=crop&w=1080&q=80', photographer: 'chloe s.', photographerUrl: 'https://unsplash.com/@chloesimpson' },
   'Fiction':                         { url: 'https://images.unsplash.com/photo-1572097560317-1189048dac38?auto=format&fit=crop&w=1080&q=80', photographer: 'Ondrej Bocek', photographerUrl: 'https://unsplash.com/@ondrejbocek' },
   'History':                         { url: 'https://images.unsplash.com/photo-1592252032050-34897f779223?auto=format&fit=crop&w=1080&q=80', photographer: 'Benigno Hoyuela', photographerUrl: 'https://unsplash.com/@benignohoyuela' },
   'Personal Essay & Memoir':         { url: 'https://images.unsplash.com/photo-1522794338816-ee3a17a00ae8?auto=format&fit=crop&w=1080&q=80', photographer: 'Debby Hudson', photographerUrl: 'https://unsplash.com/@hudsoncrafted' },
   'Poetry':                          { url: 'https://images.unsplash.com/photo-1487147264018-f937fba0c817?auto=format&fit=crop&w=1080&q=80', photographer: 'Mona Eendra', photographerUrl: 'https://unsplash.com/@monaeendra' },
   'Relationships':                   { url: 'https://images.unsplash.com/photo-1613244600331-ac72a1ee5256?auto=format&fit=crop&w=1080&q=80', photographer: 'freestocks', photographerUrl: 'https://unsplash.com/@freestocks' },
-  'Religion Spirituality & Theology':{ url: 'https://images.unsplash.com/photo-1586084531165-7c2dede00604?auto=format&fit=crop&w=1080&q=80', photographer: 'Sincerely Media', photographerUrl: 'https://unsplash.com/@sincerelymedia' },
-  'Science & Health':                { url: 'https://images.unsplash.com/photo-1576086085526-0de1930a57c7?auto=format&fit=crop&w=1080&q=80', photographer: 'National Cancer Institute', photographerUrl: 'https://unsplash.com/@nci' },
+  'Religion, Spirituality & Theology':{ url: 'https://images.unsplash.com/photo-1586084531165-7c2dede00604?auto=format&fit=crop&w=1080&q=80', photographer: 'Sincerely Media', photographerUrl: 'https://unsplash.com/@sincerelymedia' },
+  'Science':                         { url: 'https://images.unsplash.com/photo-1576086085526-0de1930a57c7?auto=format&fit=crop&w=1080&q=80', photographer: 'National Cancer Institute', photographerUrl: 'https://unsplash.com/@nci' },
   'Tech & AI':                       { url: 'https://images.unsplash.com/photo-1531297484001-80022131f5a1?auto=format&fit=crop&w=1080&q=80', photographer: 'Ales Nesetril', photographerUrl: 'https://unsplash.com/@alesnesetril' },
-  'Trade and Industry':              { url: 'https://images.unsplash.com/photo-1522125307274-36420256794e?auto=format&fit=crop&w=1080&q=80', photographer: 'Tim Mossholder', photographerUrl: 'https://unsplash.com/@timmossholder' },
+  'Trade & Industry':                { url: 'https://images.unsplash.com/photo-1522125307274-36420256794e?auto=format&fit=crop&w=1080&q=80', photographer: 'Tim Mossholder', photographerUrl: 'https://unsplash.com/@timmossholder' },
   'Travel & Food':                   { url: 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1080&q=80', photographer: 'Jake Blucker', photographerUrl: 'https://unsplash.com/@jakeblucker' }
 };
 
@@ -48,8 +57,8 @@ function doGet(e) {
   if (p.url) return fetchRSS(p.url);
 
   // Digest actions
-  if (action === 'preview')       return respond(previewDigest(p.from, p.to, p.cat || '__all__'));
-  if (action === 'createDigest')  return respond(buildAndWriteDigest(p.from, p.to, p.cat || '__all__', p.overrides ? JSON.parse(p.overrides) : {}));
+  if (action === 'preview')       return respond(previewDigest(p.from, p.to, p.cat || '__all__', p.digest || ''));
+  if (action === 'createDigest')  return respond(buildAndWriteDigest(p.from, p.to, p.cat || '__all__', p.digest || '', p.overrides ? JSON.parse(p.overrides) : {}));
 
   // Writer actions
   if (action === 'updateCategory') return updateCategory(p.name, p.category);
@@ -438,9 +447,19 @@ function loadWriterData(ss) {
   return { profileMap, writerCatsMap };
 }
 
-function loadArticles(fromD, toD, catFilter, overrides) {
+// Resolves the digest/category selection to the list of categories to include
+// (null = all categories), and the section order for output.
+function resolveCatList(catFilter, digest) {
+  if (catFilter && catFilter !== '__all__') return [catFilter];
+  if (digest && DIGESTS[digest]) return DIGESTS[digest];
+  return null;
+}
+
+// overrides is keyed by article URL: { "https://...": "Tech & AI" }
+function loadArticles(fromD, toD, catFilter, digest, overrides) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const { profileMap, writerCatsMap } = loadWriterData(ss);
+  const catList = resolveCatList(catFilter, digest);
 
   const aSheet = ss.getSheetByName(ARTICLES_SHEET);
   const aRows = aSheet.getDataRange().getValues();
@@ -460,37 +479,41 @@ function loadArticles(fromD, toD, catFilter, overrides) {
     if (pubDate < fromD || pubDate > toD) continue;
 
     const writerCats  = writerCatsMap[writerName] || (storedCategory ? [storedCategory] : []);
-    const effectiveCat = overrides[writerName] || storedCategory;
+    const effectiveCat = overrides[url] || storedCategory;
 
-    if (catFilter !== '__all__' && !writerCats.includes(catFilter) && effectiveCat !== catFilter) continue;
+    if (catList && !catList.includes(effectiveCat) && !writerCats.some(c => catList.includes(c))) continue;
 
     const profileLink = getProfileUrl(profileMap[writerName] || '');
+    const placedCat = (catList && !catList.includes(effectiveCat))
+      ? writerCats.find(c => catList.includes(c))
+      : effectiveCat;
 
-    if (effectiveCat) {
-      if (!catMap[effectiveCat]) catMap[effectiveCat] = {};
-      if (!catMap[effectiveCat][writerName]) catMap[effectiveCat][writerName] = { profileLink, articles: [] };
-      catMap[effectiveCat][writerName].articles.push({ title, url });
+    if (placedCat) {
+      if (!catMap[placedCat]) catMap[placedCat] = {};
+      if (!catMap[placedCat][writerName]) catMap[placedCat][writerName] = { profileLink, articles: [] };
+      catMap[placedCat][writerName].articles.push({ title, url });
     } else {
       if (!uncatMap[writerName]) uncatMap[writerName] = { profileLink, articles: [] };
       uncatMap[writerName].articles.push({ title, url });
     }
     totalArticles++;
 
-    if (writerCats.length > 1 && !overrides[writerName]) {
+    // Writers with 2+ categories: offer a per-article category choice
+    if (writerCats.length > 1 && !overrides[url]) {
       if (!multicatPending[writerName]) multicatPending[writerName] = { cats: writerCats, articles: [] };
-      multicatPending[writerName].articles.push({ title, url });
+      multicatPending[writerName].articles.push({ title, url, current: placedCat || storedCategory });
     }
   }
 
   const writerCount = Object.values(catMap).reduce((n, c) => n + Object.keys(c).length, 0) + Object.keys(uncatMap).length;
-  return { catMap, uncatMap, multicatPending, totalArticles, writerCount };
+  return { catMap, uncatMap, multicatPending, totalArticles, writerCount, catList };
 }
 
-function previewDigest(fromStr, toStr, catFilter) {
+function previewDigest(fromStr, toStr, catFilter, digest) {
   if (!fromStr || !toStr) return { error: 'Missing from/to dates' };
   const fromD = new Date(fromStr + 'T00:00:00');
   const toD   = new Date(toStr   + 'T23:59:59');
-  const { catMap, uncatMap, multicatPending, totalArticles, writerCount } = loadArticles(fromD, toD, catFilter, {});
+  const { catMap, uncatMap, multicatPending, totalArticles, writerCount } = loadArticles(fromD, toD, catFilter, digest, {});
 
   return {
     success: true,
@@ -498,32 +521,58 @@ function previewDigest(fromStr, toStr, catFilter) {
     articles: totalArticles,
     categories: Object.keys(catMap).length + (Object.keys(uncatMap).length > 0 ? 1 : 0),
     uncategorised: Object.entries(uncatMap).map(([name, { articles }]) => ({ name, articles: articles.slice(0, 3) })),
-    multicat_writers: Object.entries(multicatPending).map(([name, { cats, articles }]) => ({ name, cats, articles: articles.slice(0, 3) }))
+    multicat_writers: Object.entries(multicatPending).map(([name, { cats, articles }]) => ({ name, cats, articles: articles.slice(0, 20) }))
   };
 }
 
-function buildAndWriteDigest(fromStr, toStr, catFilter, overrides) {
+// Writes per-article category choices back to the Articles tab so they stick.
+function persistArticleCategories(overrides) {
+  const urls = Object.keys(overrides || {});
+  if (!urls.length) return 0;
+  const aSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ARTICLES_SHEET);
+  const aRows = aSheet.getDataRange().getValues();
+  let updated = 0;
+  for (let i = 1; i < aRows.length; i++) {
+    const url = (aRows[i][3] || '').toString().trim();
+    if (overrides[url] && overrides[url] !== (aRows[i][1] || '').toString().trim()) {
+      aSheet.getRange(i + 1, 2).setValue(overrides[url]);
+      updated++;
+    }
+  }
+  return updated;
+}
+
+function buildAndWriteDigest(fromStr, toStr, catFilter, digest, overrides) {
   if (!fromStr || !toStr) return { error: 'Missing from/to dates' };
   const fromD = new Date(fromStr + 'T00:00:00');
   const toD   = new Date(toStr   + 'T23:59:59');
-  const { catMap, uncatMap, totalArticles, writerCount } = loadArticles(fromD, toD, catFilter, overrides);
+  const saved = persistArticleCategories(overrides);
+  const { catMap, uncatMap, totalArticles, writerCount, catList } = loadArticles(fromD, toD, catFilter, digest, overrides);
 
-  const tabName = formatTabName(fromStr, toStr);
-  writeToDoc(catMap, uncatMap, tabName);
+  const tabName = (digest && DIGESTS[digest] ? digest + ' Digest: ' : 'Digest: ') + formatTabName(fromStr, toStr);
+  writeToDoc(catMap, uncatMap, tabName, catList);
 
   return {
     success: true,
     writers: writerCount,
     articles: totalArticles,
+    categoriesSaved: saved,
     tab: tabName,
     url: 'https://docs.google.com/document/d/' + DIGEST_DOC_ID + '/edit',
-    html: buildDigestHtml(catMap, uncatMap, tabName, catFilter === '__all__')
+    html: buildDigestHtml(catMap, uncatMap, tabName, catFilter === '__all__', catList)
   };
 }
 
-function buildDigestHtml(catMap, uncatMap, tabName, includeImages) {
-  let html = '<h1>Digest: ' + escapeHtml(tabName) + '</h1>';
-  for (const cat of Object.keys(catMap).sort()) {
+// catList (when set) controls section order; otherwise alphabetical.
+function orderedCats(catMap, catList) {
+  const present = Object.keys(catMap);
+  if (!catList) return present.sort();
+  return catList.filter(c => present.includes(c)).concat(present.filter(c => !catList.includes(c)).sort());
+}
+
+function buildDigestHtml(catMap, uncatMap, tabName, includeImages, catList) {
+  let html = '<h1>' + escapeHtml(tabName) + '</h1>';
+  for (const cat of orderedCats(catMap, catList)) {
     if (includeImages) html += categoryImageHtml(cat);
     html += '<h2>' + escapeHtml(cat) + '</h2>';
     for (const writerName of Object.keys(catMap[cat]).sort()) {
@@ -567,13 +616,13 @@ function escapeHtml(s) {
   return s.toString().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-function writeToDoc(catMap, uncatMap, tabName) {
+function writeToDoc(catMap, uncatMap, tabName, catList) {
   const doc  = DocumentApp.openById(DIGEST_DOC_ID);
   const body = doc.getBody();
 
   if (body.getText().trim().length > 0) body.insertPageBreak(0);
 
-  const sortedCats = Object.keys(catMap).sort();
+  const sortedCats = orderedCats(catMap, catList);
   const hasUncat   = Object.keys(uncatMap).length > 0;
   let insertIndex  = 0;
 
@@ -597,7 +646,7 @@ function writeToDoc(catMap, uncatMap, tabName) {
     body.insertParagraph(insertIndex, '');
   }
 
-  const titlePara = body.insertParagraph(0, 'Digest: ' + tabName);
+  const titlePara = body.insertParagraph(0, tabName);
   titlePara.setHeading(DocumentApp.ParagraphHeading.HEADING1);
   doc.saveAndClose();
 }
