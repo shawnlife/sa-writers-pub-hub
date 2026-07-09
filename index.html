@@ -49,7 +49,7 @@ select:focus,input[type=date]:focus{outline:none;border-color:#e11c47}
 .btn-outline:hover{background:#fde8ec}
 .bulk-rows{display:flex;flex-direction:column;gap:6px;margin-bottom:10px;padding-right:4px}
 .bulk-rows.scrollable{max-height:340px;overflow-y:auto}
-.bulk-row{display:grid;grid-template-columns:1fr 1.3fr 1fr 24px;gap:6px;align-items:center}
+.bulk-row{display:grid;grid-template-columns:1fr 1.4fr 1.4fr 1fr 1fr 1fr 24px;gap:6px;align-items:center}
 .bulk-row input,.bulk-row select{width:100%;font-family:inherit;border:0.5px solid #ddd;border-radius:8px;padding:6px 8px;font-size:12px;background:#fff;color:#111}
 .bulk-remove{background:none;border:none;color:#aaa;cursor:pointer;font-size:17px;line-height:1;padding:0}
 .bulk-remove:hover{color:#e11c47}
@@ -220,12 +220,15 @@ select:focus,input[type=date]:focus{outline:none;border-color:#e11c47}
   </div>
 
   <div id="bulk-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:50;align-items:center;justify-content:center;padding:1rem">
-    <div class="card" style="max-width:560px;width:100%;margin:0">
+    <div class="card" style="max-width:min(1100px,94vw);width:100%;margin:0">
       <div class="card-title">Add multiple writers</div>
       <div class="bulk-row" style="margin-bottom:6px">
         <label style="font-size:11px;color:#888">Name</label>
-        <label style="font-size:11px;color:#888">Substack link</label>
-        <label style="font-size:11px;color:#888">Category</label>
+        <label style="font-size:11px;color:#888">Profile link — substack.com/@username</label>
+        <label style="font-size:11px;color:#888">RSS feeds — username.substack.com/feed</label>
+        <label style="font-size:11px;color:#888">Category 1</label>
+        <label style="font-size:11px;color:#888">Category 2</label>
+        <label style="font-size:11px;color:#888">Category 3</label>
         <span></span>
       </div>
       <div class="bulk-rows" id="bulk-rows"></div>
@@ -664,10 +667,14 @@ function addBulkRow() {
   const rows = $('bulk-rows');
   const div = document.createElement('div');
   div.className = 'bulk-row';
+  const catOpts = allCats.map(c => `<option value="${c}">${c}</option>`).join('');
   div.innerHTML = `
     <input type="text" class="bulk-name" placeholder="Name">
-    <input type="text" class="bulk-link" placeholder="Substack link">
-    <select class="bulk-cat"><option value="">— uncategorised —</option>${allCats.map(c => `<option value="${c}">${c}</option>`).join('')}</select>
+    <input type="text" class="bulk-link" placeholder="https://substack.com/@username">
+    <input type="text" class="bulk-feeds" placeholder="https://username.substack.com/feed">
+    <select class="bulk-cat"><option value="">— uncategorised —</option>${catOpts}</select>
+    <select class="bulk-cat2"><option value="">— none —</option>${catOpts}</select>
+    <select class="bulk-cat3"><option value="">— none —</option>${catOpts}</select>
     <button type="button" class="bulk-remove" onclick="this.parentElement.remove(); updateBulkScroll();">×</button>
   `;
   rows.appendChild(div);
@@ -682,7 +689,10 @@ async function saveBulkModal() {
   const entries = [...$('bulk-rows').children].map(r => ({
     name: r.querySelector('.bulk-name').value.trim(),
     link: r.querySelector('.bulk-link').value.trim(),
-    category: r.querySelector('.bulk-cat').value
+    feeds: r.querySelector('.bulk-feeds').value.trim(),
+    category: r.querySelector('.bulk-cat').value,
+    cat2: r.querySelector('.bulk-cat2').value,
+    cat3: r.querySelector('.bulk-cat3').value
   })).filter(e => e.name);
 
   if (!entries.length) {
@@ -695,7 +705,7 @@ async function saveBulkModal() {
     const e = entries[i];
     $('bulk-modal-status').textContent = `Saving ${i + 1}/${entries.length}…`; $('bulk-modal-status').className = 'status';
     try {
-      const url = AS1 + '?action=addWriter&name=' + encodeURIComponent(e.name) + '&link=' + encodeURIComponent(e.link) + '&category=' + encodeURIComponent(e.category);
+      const url = AS1 + '?action=addWriter&name=' + encodeURIComponent(e.name) + '&link=' + encodeURIComponent(e.link) + '&category=' + encodeURIComponent(e.category) + '&cat2=' + encodeURIComponent(e.cat2) + '&cat3=' + encodeURIComponent(e.cat3) + '&feeds=' + encodeURIComponent(e.feeds);
       const resp = await fetch(url);
       const data = await resp.json();
       if (data.success) ok++; else failed.push(e.name + ': ' + (data.error || 'unknown error'));
