@@ -388,17 +388,23 @@ function syncRSS() {
     articlesSheet.getRange(articlesSheet.getLastRow() + 1, 1, newRows.length, 5).setValues(newRows);
   }
 
-  // Refresh the Last Post column so it never goes stale
+  // Refresh the Last Post column so it never goes stale.
+  // Built as one column array and written with a single setValues call —
+  // per-cell writes exceed the 6-minute execution limit.
   const lpi = wh.findIndex(x => x.includes('last'));
-  if (lpi >= 0) {
+  if (lpi >= 0 && wRows.length > 1) {
     const tz = Session.getScriptTimeZone();
+    const col = [];
     for (let i = 1; i < wRows.length; i++) {
       const name = wRows[i][ni]?.toString().trim();
-      if (!name || !(name in latestByName)) continue; // no feed fetched this run — leave as is
-      const latest = latestByName[name];
-      const val = latest ? Utilities.formatDate(latest, tz, 'yyyy-MM-dd') : 'no posts found';
-      if (wRows[i][lpi]?.toString() !== val) writersSheet.getRange(i + 1, lpi + 1).setValue(val);
+      let val = wRows[i][lpi]; // default: keep existing (no feed, or fetch failed this run)
+      if (name && (name in latestByName)) {
+        const latest = latestByName[name];
+        val = latest ? Utilities.formatDate(latest, tz, 'yyyy-MM-dd') : 'no posts found';
+      }
+      col.push([val]);
     }
+    writersSheet.getRange(2, lpi + 1, col.length, 1).setValues(col);
   }
 
   console.log(`Sync done. ${fetched} feeds OK, ${failed} failed. Added ${newRows.length} articles.`);
