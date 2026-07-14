@@ -14,20 +14,86 @@
 const SHEET_ID      = '11VMjloWhg9qJNfUMMTTAdLQkqt7DqoU8cvoBmxx1WEk';
 const WRITERS_SHEET = 'Writers';
 const ARTICLES_SHEET = 'Articles';
+const ORG_SHEET      = 'Organization';
 const DIGEST_DOC_ID  = '1c865BZua0CQ1WkOCvoIgjLbn9Gx7MqrMQ_G4Kpm3mp4';
 const DAYS_TO_KEEP   = 90;
 
 const NAME_COLOR    = '#e11c47';
 const ARTICLE_COLOR = '#000000';
 
-// The 5 digests and their sub-sections, in Jen's publishing order
-const DIGESTS = {
+// Fallback digest structure — used only to seed the Organization sheet the
+// first time it's created. After that, the sheet itself is the source of
+// truth (read live by loadDigestMap on every request).
+const DEFAULT_DIGESTS = {
   'Arts':      ['Arts & Culture', 'Books, Writing & Literature', 'Fiction', 'Poetry'],
   'Business':  ['Business, Work & Economics', 'Tech & AI', 'Trade & Industry'],
   'Personal':  ['Birth, Fertility & Parenting', 'Personal Essay & Memoir', 'Relationships'],
   'Politics':  ['Education', 'Feminism, Gender & LGBTQI+', 'History', 'Politics, Media & Government', 'Religion, Spirituality & Theology'],
   'Our World': ['Climate, Environment & Sustainability', 'Science', 'Sports & Fitness', 'Travel & Food']
 };
+
+// Organization sheet layout: row 1 = digest names (one per column),
+// rows 2+ = that digest's sub-categories in publishing order (blanks skipped).
+function ensureOrgSheet(ss) {
+  let sheet = ss.getSheetByName(ORG_SHEET);
+  if (sheet) return sheet;
+  sheet = ss.insertSheet(ORG_SHEET);
+  writeDigestMap(sheet, DEFAULT_DIGESTS);
+  return sheet;
+}
+
+function loadDigestMap(ss) {
+  const sheet = ensureOrgSheet(ss);
+  const values = sheet.getDataRange().getValues();
+  if (!values.length) return {};
+  const map = {};
+  const headers = values[0];
+  for (let c = 0; c < headers.length; c++) {
+    const digestName = (headers[c] || '').toString().trim();
+    if (!digestName) continue;
+    const cats = [];
+    for (let r = 1; r < values.length; r++) {
+      const v = (values[r][c] || '').toString().trim();
+      if (v) cats.push(v);
+    }
+    map[digestName] = cats;
+  }
+  return map;
+}
+
+function writeDigestMap(sheet, map) {
+  sheet.clearContents();
+  const names = Object.keys(map);
+  if (!names.length) return;
+  const maxRows = Math.max(1, ...names.map(n => map[n].length)) + 1;
+  const grid = Array.from({ length: maxRows }, () => new Array(names.length).fill(''));
+  names.forEach((name, c) => {
+    grid[0][c] = name;
+    map[name].forEach((cat, r) => { grid[r + 1][c] = cat; });
+  });
+  sheet.getRange(1, 1, grid.length, names.length).setValues(grid);
+}
+
+function getOrganization() {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    return respond({ success: true, digests: loadDigestMap(ss) });
+  } catch (e) {
+    return respond({ error: e.message });
+  }
+}
+
+function saveOrganization(payloadStr) {
+  try {
+    const map = JSON.parse(payloadStr || '{}');
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ensureOrgSheet(ss);
+    writeDigestMap(sheet, map);
+    return respond({ success: true });
+  } catch (e) {
+    return respond({ error: e.message });
+  }
+}
 
 const CATEGORY_IMAGES = {
   'Arts & Culture':                  { url: 'https://images.unsplash.com/photo-1587731556938-38755b4803a6?auto=format&fit=crop&w=1080&q=80', photographer: 'Clay Banks', photographerUrl: 'https://unsplash.com/@claybanks' },
@@ -65,6 +131,10 @@ function doGet(e) {
   if (action === 'addWriter')      return addWriter(p.name, p.link, p.category, p.cat2, p.cat3, p.feeds);
   if (action === 'updateWriter')   return updateWriter(p.originalName, p.name, p.link, p.category, p.cat2, p.cat3, p.feeds);
   if (action === 'syncCategories') return syncCategories();
+
+  // Organization (digest structure) actions
+  if (action === 'getOrganization')  return getOrganization();
+  if (action === 'saveOrganization') return saveOrganization(p.digests);
 
   // Default: return full writer list
   return getWriters();
@@ -472,9 +542,9 @@ function loadWriterData(ss) {
 
 // Resolves the digest/category selection to the list of categories to include
 // (null = all categories), and the section order for output.
-function resolveCatList(catFilter, digest) {
+function resolveCatList(catFilter, digest, digestMap) {
   if (catFilter && catFilter !== '__all__') return [catFilter];
-  if (digest && DIGESTS[digest]) return DIGESTS[digest];
+  if (digest && digestMap[digest]) return digestMap[digest];
   return null;
 }
 
@@ -482,7 +552,7 @@ function resolveCatList(catFilter, digest) {
 function loadArticles(fromD, toD, catFilter, digest, overrides) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const { profileMap, writerCatsMap } = loadWriterData(ss);
-  const catList = resolveCatList(catFilter, digest);
+  const catList = resolveCatList(catFilter, digest, loadDigestMap(ss));
 
   const aSheet = ss.getSheetByName(ARTICLES_SHEET);
   const aRows = aSheet.getDataRange().getValues();
@@ -572,7 +642,7 @@ function buildAndWriteDigest(fromStr, toStr, catFilter, digest, overrides) {
   const saved = persistArticleCategories(overrides);
   const { catMap, uncatMap, totalArticles, writerCount, catList } = loadArticles(fromD, toD, catFilter, digest, overrides);
 
-  const tabName = (digest && DIGESTS[digest] ? digest + ' Digest: ' : 'Digest: ') + formatTabName(fromStr, toStr);
+  const tabName = digest ? digest + ' Digest: ' + formatTabName(fromStr, toStr) : 'Digest: ' + formatTabName(fromStr, toStr);
   writeToDoc(catMap, uncatMap, tabName, catList);
 
   return {

@@ -122,6 +122,21 @@ select:focus,input[type=date]:focus{outline:none;border-color:#e11c47}
 .cat-chip-add{border-style:dashed;color:#e11c47;border-color:#e11c47}
 .cat-chip-add:hover{background:#fff5f7}
 .cat-chip-input{padding:3px 9px;border-radius:20px;font-size:11px;border:1px solid #e11c47;outline:none;color:#333;font-family:inherit;line-height:1.6;width:130px}
+
+.org-board{display:flex;gap:14px;overflow-x:auto;padding-bottom:8px;align-items:flex-start}
+.org-col{flex:0 0 210px;background:#f7f7f5;border-radius:12px;padding:10px;min-height:80px;display:flex;flex-direction:column}
+.org-col-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:4px}
+.org-col-title{font-size:13px;font-weight:600;color:#222;flex:1;outline:none;border:1px solid transparent;border-radius:6px;padding:2px 4px}
+.org-col-title:focus{border-color:#e11c47;background:#fff}
+.org-col-remove{font-size:14px;color:#bbb;cursor:pointer;line-height:1;padding:2px 4px;border-radius:6px}
+.org-col-remove:hover{color:#e11c47;background:#fff}
+.org-col-body{display:flex;flex-direction:column;gap:6px;min-height:40px}
+.org-chip{background:#fff;border:1px solid #e0e0dc;border-radius:8px;padding:6px 9px;font-size:12px;color:#333;cursor:grab;display:flex;align-items:center;justify-content:space-between;gap:6px}
+.org-chip.dragging{opacity:.35}
+.org-chip-x{color:#ccc;font-size:13px;cursor:pointer;flex-shrink:0}
+.org-chip-x:hover{color:#e11c47}
+.org-col-body.drag-over{background:#fdeef0;border-radius:8px;outline:2px dashed #e11c47;outline-offset:2px}
+.org-unassigned{margin-top:6px;padding:8px 4px 2px;border-top:1px dashed #ddd}
 </style>
 </head>
 <body>
@@ -177,6 +192,7 @@ select:focus,input[type=date]:focus{outline:none;border-color:#e11c47}
   <div class="tab-nav">
     <button class="tab-btn active" id="tab-btn-digest" onclick="switchTab('digest')">Digest</button>
     <button class="tab-btn" id="tab-btn-writers" onclick="switchTab('writers')">Writers</button>
+    <button class="tab-btn" id="tab-btn-org" onclick="switchTab('org')">Organization</button>
   </div>
 
   <div id="writer-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:50;align-items:center;justify-content:center;padding:1rem">
@@ -254,11 +270,6 @@ select:focus,input[type=date]:focus{outline:none;border-color:#e11c47}
         <label>Digest</label>
         <select id="digest-filter" onchange="if(this.value)$('cat-filter').value='__all__'">
           <option value="">Full digest — all categories</option>
-          <option value="Arts">Arts Digest</option>
-          <option value="Business">Business Digest</option>
-          <option value="Personal">Personal Digest</option>
-          <option value="Politics">Politics Digest</option>
-          <option value="Our World">Our World Digest</option>
         </select>
       </div>
       <div class="field" style="margin-top:8px">
@@ -347,6 +358,16 @@ select:focus,input[type=date]:focus{outline:none;border-color:#e11c47}
     <div id="db-table-wrap"></div>
   </div>
 
+  <div id="tab-org" style="display:none">
+    <p class="sec-desc" style="margin-bottom:1rem">This is the structure behind the digest generator. Each column is one digest — drag a category chip to move it between digests or reorder it within one. Changes save automatically to the Organization sheet.</p>
+    <div style="display:flex;gap:8px;margin-bottom:1rem">
+      <button class="btn-outline" onclick="addOrgDigest()">+ Add digest</button>
+      <button class="btn-outline" onclick="addOrgCategory()">+ Add category</button>
+    </div>
+    <div id="org-board" class="org-board"></div>
+    <div class="status" id="org-status" style="margin-top:10px"></div>
+  </div>
+
 </div>
 <footer style="text-align:center;padding:1.5rem 1rem;font-size:12px;color:#aaa">Tool made using AI vibe-coding by <a href="https://shawnlife.com" target="_blank" style="color:#aaa;text-decoration:underline">ShawnLife</a></footer>
 
@@ -361,6 +382,7 @@ const AS2 = SCRIPT_URL;
 
 // ============================================================
 let writers = [], allCats = [], lastResults = null, isRunning = false, lastDigestHtml = '', lastDocUrl = '', writerModalMode = 'add', multicatOverrides = {};
+let orgDigests = {}, orgDragChip = null, orgDragFrom = null;
 const $ = id => document.getElementById(id);
 
 function setDot(s) { $('dot').className = 'dot ' + (s === 'ok' ? 'ok' : s === 'err' ? 'err' : 'spin'); }
@@ -736,6 +758,13 @@ $('d-to').max = maxDate;
 $('d-to').value = maxDate;
 $('d-from').value = twoWeeksAgo.toISOString().split('T')[0];
 loadSheet();
+(async () => {
+  try {
+    const resp = await fetch(AS1 + '?action=getOrganization', { signal: AbortSignal.timeout(20000) });
+    const data = await resp.json();
+    if (data.success) { orgDigests = data.digests || {}; populateDigestDropdown(); }
+  } catch (e) {}
+})();
 
 // ─── DB sort + category filter state ─────────────────────────────────────────
 let dbSort = { col: 'name', dir: 1 };
@@ -755,9 +784,161 @@ function sortInd(col) {
 function switchTab(tab) {
   $('tab-digest').style.display  = tab === 'digest'  ? 'block' : 'none';
   $('tab-writers').style.display = tab === 'writers' ? 'block' : 'none';
+  $('tab-org').style.display     = tab === 'org'     ? 'block' : 'none';
   $('tab-btn-digest').classList.toggle('active',  tab === 'digest');
   $('tab-btn-writers').classList.toggle('active', tab === 'writers');
+  $('tab-btn-org').classList.toggle('active', tab === 'org');
   if (tab === 'writers') { renderCatChips(); renderWritersTable(); }
+  if (tab === 'org') loadOrganization();
+}
+
+function populateDigestDropdown() {
+  const sel = $('digest-filter');
+  const current = sel.value;
+  sel.innerHTML = '<option value="">Full digest — all categories</option>' +
+    Object.keys(orgDigests).map(d => `<option value="${escHtml(d)}">${escHtml(d)} Digest</option>`).join('');
+  if ([...sel.options].some(o => o.value === current)) sel.value = current;
+}
+
+async function loadOrganization() {
+  $('org-status').textContent = 'Loading…'; $('org-status').className = 'status';
+  try {
+    const resp = await fetch(AS1 + '?action=getOrganization', { signal: AbortSignal.timeout(20000) });
+    const data = await resp.json();
+    if (!data.success) throw new Error(data.error || 'Unknown error');
+    orgDigests = data.digests || {};
+    populateDigestDropdown();
+    renderOrgBoard();
+    $('org-status').textContent = '';
+  } catch (e) {
+    $('org-status').textContent = 'Error loading organization: ' + e.message;
+    $('org-status').className = 'status err';
+  }
+}
+
+function renderOrgBoard() {
+  const board = $('org-board');
+  board.innerHTML = '';
+  Object.keys(orgDigests).forEach(digestName => {
+    board.appendChild(renderOrgColumn(digestName));
+  });
+}
+
+function renderOrgColumn(digestName) {
+  const col = document.createElement('div');
+  col.className = 'org-col';
+  col.dataset.digest = digestName;
+
+  const hdr = document.createElement('div'); hdr.className = 'org-col-hdr';
+  const title = document.createElement('div');
+  title.className = 'org-col-title';
+  title.contentEditable = true;
+  title.textContent = digestName;
+  title.addEventListener('blur', () => renameOrgDigest(digestName, title.textContent.trim()));
+  title.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); title.blur(); } });
+  const remove = document.createElement('span');
+  remove.className = 'org-col-remove'; remove.textContent = '✕'; remove.title = 'Delete this digest';
+  remove.onclick = () => removeOrgDigest(digestName);
+  hdr.appendChild(title); hdr.appendChild(remove);
+
+  const body = document.createElement('div');
+  body.className = 'org-col-body';
+  body.addEventListener('dragover', e => { e.preventDefault(); body.classList.add('drag-over'); });
+  body.addEventListener('dragleave', () => body.classList.remove('drag-over'));
+  body.addEventListener('drop', e => {
+    e.preventDefault(); body.classList.remove('drag-over');
+    if (!orgDragChip) return;
+    const cat = orgDragChip.dataset.cat;
+    orgDigests[orgDragFrom] = orgDigests[orgDragFrom].filter(c => c !== cat);
+    if (!orgDigests[digestName].includes(cat)) orgDigests[digestName].push(cat);
+    renderOrgBoard();
+    saveOrganization();
+  });
+
+  (orgDigests[digestName] || []).forEach(cat => body.appendChild(renderOrgChip(cat, digestName)));
+
+  col.appendChild(hdr); col.appendChild(body);
+  return col;
+}
+
+function renderOrgChip(cat, digestName) {
+  const chip = document.createElement('div');
+  chip.className = 'org-chip';
+  chip.draggable = true;
+  chip.dataset.cat = cat;
+  const label = document.createElement('span'); label.textContent = cat;
+  const x = document.createElement('span'); x.className = 'org-chip-x'; x.textContent = '×';
+  x.title = 'Remove from this digest';
+  x.onclick = () => {
+    orgDigests[digestName] = orgDigests[digestName].filter(c => c !== cat);
+    renderOrgBoard();
+    saveOrganization();
+  };
+  chip.appendChild(label); chip.appendChild(x);
+  chip.addEventListener('dragstart', () => {
+    orgDragChip = chip; orgDragFrom = digestName;
+    setTimeout(() => chip.classList.add('dragging'), 0);
+  });
+  chip.addEventListener('dragend', () => { chip.classList.remove('dragging'); orgDragChip = null; });
+  return chip;
+}
+
+function addOrgDigest() {
+  const name = prompt('New digest name:');
+  if (!name || !name.trim()) return;
+  const clean = name.trim();
+  if (orgDigests[clean]) { alert('A digest with that name already exists.'); return; }
+  orgDigests[clean] = [];
+  renderOrgBoard();
+  populateDigestDropdown();
+  saveOrganization();
+}
+
+function removeOrgDigest(digestName) {
+  if (!confirm(`Delete the "${digestName}" digest? Its categories will still exist and can be used individually — they just won't be grouped under this digest anymore.`)) return;
+  delete orgDigests[digestName];
+  renderOrgBoard();
+  populateDigestDropdown();
+  saveOrganization();
+}
+
+function renameOrgDigest(oldName, newName) {
+  if (!newName || newName === oldName) { renderOrgBoard(); return; }
+  if (orgDigests[newName]) { alert('A digest with that name already exists.'); renderOrgBoard(); return; }
+  orgDigests[newName] = orgDigests[oldName];
+  delete orgDigests[oldName];
+  renderOrgBoard();
+  populateDigestDropdown();
+  saveOrganization();
+}
+
+function addOrgCategory() {
+  const digestNames = Object.keys(orgDigests);
+  if (!digestNames.length) { alert('Add a digest first.'); return; }
+  const cat = prompt('New category name:');
+  if (!cat || !cat.trim()) return;
+  const clean = cat.trim();
+  const digestName = digestNames.length === 1 ? digestNames[0]
+    : prompt(`Add "${clean}" to which digest?\n(${digestNames.join(', ')})`, digestNames[0]);
+  if (!digestName || !orgDigests[digestName]) { alert('Not a valid digest name.'); return; }
+  if (!orgDigests[digestName].includes(clean)) orgDigests[digestName].push(clean);
+  renderOrgBoard();
+  saveOrganization();
+}
+
+async function saveOrganization() {
+  $('org-status').textContent = 'Saving…'; $('org-status').className = 'status';
+  try {
+    const url = AS1 + '?action=saveOrganization&digests=' + encodeURIComponent(JSON.stringify(orgDigests));
+    const resp = await fetch(url, { signal: AbortSignal.timeout(20000) });
+    const data = await resp.json();
+    if (!data.success) throw new Error(data.error || 'Unknown error');
+    $('org-status').textContent = '✓ Saved';
+    $('org-status').className = 'status ok';
+  } catch (e) {
+    $('org-status').textContent = 'Error saving: ' + e.message;
+    $('org-status').className = 'status err';
+  }
 }
 
 // ─── Writers database ─────────────────────────────────────────────────────────
