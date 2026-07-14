@@ -14,14 +14,15 @@
 const SHEET_ID      = '11VMjloWhg9qJNfUMMTTAdLQkqt7DqoU8cvoBmxx1WEk';
 const WRITERS_SHEET = 'Writers';
 const ARTICLES_SHEET = 'Articles';
-const ORG_SHEET      = 'Organization';
+const ORG_SHEET      = 'Categories';
+const ORG_SHEET_LEGACY_NAME = 'Organization'; // pre-rename tab name — auto-migrated if found
 const DIGEST_DOC_ID  = '1c865BZua0CQ1WkOCvoIgjLbn9Gx7MqrMQ_G4Kpm3mp4';
 const DAYS_TO_KEEP   = 90;
 
 const NAME_COLOR    = '#e11c47';
 const ARTICLE_COLOR = '#000000';
 
-// Fallback digest structure — used only to seed the Organization sheet the
+// Fallback digest structure — used only to seed the Categories sheet the
 // first time it's created. After that, the sheet itself is the source of
 // truth (read live by loadDigestMap on every request).
 const DEFAULT_DIGESTS = {
@@ -32,11 +33,15 @@ const DEFAULT_DIGESTS = {
   'Our World': ['Climate, Environment & Sustainability', 'Science', 'Sports & Fitness', 'Travel & Food']
 };
 
-// Organization sheet layout: row 1 = digest names (one per column),
+// Organization/Categories sheet layout: row 1 = digest names (one per column),
 // rows 2+ = that digest's sub-categories in publishing order (blanks skipped).
 function ensureOrgSheet(ss) {
   let sheet = ss.getSheetByName(ORG_SHEET);
   if (sheet) return sheet;
+  // Migrate the old "Organization" tab name to "Categories" in place, so
+  // existing data isn't lost when this constant changed.
+  const legacy = ss.getSheetByName(ORG_SHEET_LEGACY_NAME);
+  if (legacy) { legacy.setName(ORG_SHEET); return legacy; }
   sheet = ss.insertSheet(ORG_SHEET);
   writeDigestMap(sheet, DEFAULT_DIGESTS);
   return sheet;
