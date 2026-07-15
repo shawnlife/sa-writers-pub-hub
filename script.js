@@ -416,28 +416,32 @@ function syncRSS() {
   const fi  = wh.findIndex(x => x.includes('feed'));
   const ci1 = wh.reduce((a, x, i) => { if (x.includes('cat')) a.push(i); return a; }, [])[0] ?? -1;
 
-  // Build feed task list: { url, name, cat }
-  const tasks = [];
+  // Build url -> [{name, cat}] map. Fetch each distinct feed URL once — some
+  // publications are shared by multiple writers (e.g. a co-authored
+  // newsletter), so the same URL can appear against more than one name.
+  const feedToWriters = {};
   for (let i = 1; i < wRows.length; i++) {
     const name  = wRows[i][ni]?.toString().trim();
     const feeds = fi >= 0 ? wRows[i][fi]?.toString().trim() : '';
     const cat   = ci1 >= 0 ? wRows[i][ci1]?.toString().trim() : '';
     if (!name || !feeds) continue;
     for (const url of feeds.split(',').map(f => f.trim()).filter(Boolean)) {
-      tasks.push({ url, name, cat });
+      if (!feedToWriters[url]) feedToWriters[url] = [];
+      if (!feedToWriters[url].some(w => w.name === name)) feedToWriters[url].push({ name, cat });
     }
   }
+  const urls = Object.keys(feedToWriters);
 
-  console.log(`Fetching ${tasks.length} feeds…`);
+  console.log(`Fetching ${urls.length} feeds…`);
 
   // fetchAll rate-limits at ~50 concurrent requests — batch with a short sleep
   const BATCH_SIZE = 50;
   const responses = [];
-  for (let b = 0; b < tasks.length; b += BATCH_SIZE) {
-    const batch = tasks.slice(b, b + BATCH_SIZE);
+  for (let b = 0; b < urls.length; b += BATCH_SIZE) {
+    const batch = urls.slice(b, b + BATCH_SIZE);
     try {
-      const batchResponses = UrlFetchApp.fetchAll(batch.map(t => ({
-        url: t.url,
+      const batchResponses = UrlFetchApp.fetchAll(batch.map(url => ({
+        url,
         method: 'get',
         headers: RSS_HEADERS,
         muteHttpExceptions: true,
@@ -446,10 +450,10 @@ function syncRSS() {
       responses.push(...batchResponses);
     } catch (err) {
       console.error(`fetchAll error on batch ${b}–${b + batch.length}: ` + err.message);
-      // Push nulls so indexes stay aligned with tasks
+      // Push nulls so indexes stay aligned with urls
       for (let i = 0; i < batch.length; i++) responses.push(null);
     }
-    if (b + BATCH_SIZE < tasks.length) Utilities.sleep(1000);
+    if (b + BATCH_SIZE < urls.length) Utilities.sleep(1000);
   }
 
   const cutoff = new Date();
@@ -471,20 +475,42 @@ function syncRSS() {
   // Dedup set
   const existingUrls = new Set(toKeep.slice(1).map(r => r[3]?.toString().trim()).filter(Boolean));
 
+  // Normalizes a name for loose author-attribution matching (case/whitespace only).
+  const norm = s => (s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+
   // Parse and collect new articles; track each writer's most recent post
   const newRows = [];
   const latestByName = {};
   let fetched = 0, failed = 0;
   for (let i = 0; i < responses.length; i++) {
-    const { name, cat, url } = tasks[i];
+    const url = urls[i];
+    const candidates = feedToWriters[url];
     const resp = responses[i];
     if (!resp || resp.getResponseCode() !== 200) { failed++; continue; }
     fetched++;
-    if (!(name in latestByName)) latestByName[name] = null; // feed reachable, may have no posts
-    for (const item of parseRSS(resp.getContentText())) {
-      if (item.pubDate && (!latestByName[name] || item.pubDate > latestByName[name])) latestByName[name] = item.pubDate;
+    // Feed is reachable — mark every referencing writer so Last Post updates
+    // even if they end up with zero matched articles this run.
+    candidates.forEach(({ name }) => { if (!(name in latestByName)) latestByName[name] = null; });
+
+    const items = parseRSS(resp.getContentText());
+    for (const item of items) {
+      // Single-writer feed: no author matching needed, the usual case.
+      // Shared feed: attribute each item to whichever candidate's name
+      // matches the RSS item's author — never to all of them at once.
+      let owner;
+      if (candidates.length === 1) {
+        owner = candidates[0];
+      } else {
+        const itemAuthor = norm(item.author);
+        owner = itemAuthor
+          ? candidates.find(c => { const n = norm(c.name); return itemAuthor.includes(n) || n.includes(itemAuthor); })
+          : undefined;
+        if (!owner) continue; // shared feed, author unclear — skip rather than misattribute
+      }
+
+      if (item.pubDate && (!latestByName[owner.name] || item.pubDate > latestByName[owner.name])) latestByName[owner.name] = item.pubDate;
       if (!item.url || existingUrls.has(item.url) || !item.pubDate || item.pubDate < cutoff) continue;
-      newRows.push([name, cat, item.title || '', item.url, item.pubDate]);
+      newRows.push([owner.name, owner.cat, item.title || '', item.url, item.pubDate]);
       existingUrls.add(item.url);
     }
   }
@@ -523,25 +549,29 @@ function parseRSS(xml) {
     if (root.getName() === 'rss') {
       const channel = root.getChild('channel');
       if (!channel) return items;
+      const dcNs = XmlService.getNamespace('dc', 'http://purl.org/dc/elements/1.1/');
       for (const item of channel.getChildren('item')) {
         const title   = item.getChildText('title') || '';
         const link    = item.getChildText('link')  || '';
+        const author  = item.getChildText('creator', dcNs) || '';
         const dateStr = item.getChildText('pubDate') || '';
         const pubDate = dateStr ? new Date(dateStr) : null;
         if (link && pubDate && !isNaN(pubDate.getTime())) {
-          items.push({ title: title.trim(), url: link.trim(), pubDate });
+          items.push({ title: title.trim(), url: link.trim(), pubDate, author: author.trim() });
         }
       }
     } else if (root.getName() === 'feed') {
       const ns = XmlService.getNamespace('http://www.w3.org/2005/Atom');
       for (const entry of root.getChildren('entry', ns)) {
-        const title   = entry.getChildText('title', ns) || '';
-        const linkEl  = entry.getChild('link', ns);
-        const link    = linkEl ? (linkEl.getAttribute('href')?.getValue() || '') : '';
-        const dateStr = entry.getChildText('published', ns) || entry.getChildText('updated', ns) || '';
-        const pubDate = dateStr ? new Date(dateStr) : null;
+        const title    = entry.getChildText('title', ns) || '';
+        const linkEl   = entry.getChild('link', ns);
+        const link     = linkEl ? (linkEl.getAttribute('href')?.getValue() || '') : '';
+        const authorEl = entry.getChild('author', ns);
+        const author   = authorEl ? (authorEl.getChildText('name', ns) || '') : '';
+        const dateStr  = entry.getChildText('published', ns) || entry.getChildText('updated', ns) || '';
+        const pubDate  = dateStr ? new Date(dateStr) : null;
         if (link && pubDate && !isNaN(pubDate.getTime())) {
-          items.push({ title: title.trim(), url: link.trim(), pubDate });
+          items.push({ title: title.trim(), url: link.trim(), pubDate, author: author.trim() });
         }
       }
     }
