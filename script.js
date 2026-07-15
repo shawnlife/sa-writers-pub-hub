@@ -136,6 +136,7 @@ function doGet(e) {
   if (action === 'addWriter')      return addWriter(p.name, p.link, p.category, p.cat2, p.cat3, p.feeds);
   if (action === 'updateWriter')   return updateWriter(p.originalName, p.name, p.link, p.category, p.cat2, p.cat3, p.feeds);
   if (action === 'syncCategories') return syncCategories();
+  if (action === 'fixStaleArticleCategories') return fixStaleArticleCategories();
 
   // Organization (digest structure) actions
   if (action === 'getOrganization')  return getOrganization();
@@ -368,6 +369,35 @@ function syncCategories() {
   }
 }
 
+// One-time repair for articles synced before a writer's category was set (or
+// before a category rename) — their stored category no longer matches any of
+// the writer's current tags. Fixes those to the writer's primary category.
+// Unlike syncCategories(), this never touches an article whose stored value
+// already matches one of the writer's tags — so Jen's manual reclassifications
+// (which pick from the writer's own categories) are always left alone.
+function fixStaleArticleCategories() {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const { writerCatsMap } = loadWriterData(ss);
+    const aSheet = ss.getSheetByName(ARTICLES_SHEET);
+    const aRows = aSheet.getDataRange().getValues();
+    let updated = 0;
+    for (let i = 1; i < aRows.length; i++) {
+      const writerName = (aRows[i][0] || '').toString().trim();
+      const cat = (aRows[i][1] || '').toString().trim();
+      if (!writerName) continue;
+      const cats = writerCatsMap[writerName] || [];
+      if (cats.length && !cats.includes(cat)) {
+        aSheet.getRange(i + 1, 2).setValue(cats[0]);
+        updated++;
+      }
+    }
+    return respond({ success: true, updated });
+  } catch (e) {
+    return respond({ error: e.message });
+  }
+}
+
 // ─── RSS Sync (daily trigger) ──────────────────────────────────────────────────
 
 const RSS_HEADERS = {
@@ -577,14 +607,18 @@ function loadArticles(fromD, toD, catFilter, digest, overrides) {
     if (pubDate < fromD || pubDate > toD) continue;
 
     const writerCats  = writerCatsMap[writerName] || (storedCategory ? [storedCategory] : []);
+    // The article's own assigned category — an explicit per-article override
+    // if Jen set one, otherwise whatever's stored — is the ONLY thing that
+    // decides which digest an article belongs to. A writer having other
+    // categories on their profile must never override an article's actual
+    // assignment (that was the bug: reclassifying an article still let it
+    // leak into a different digest because the writer also had that tag).
     const effectiveCat = overrides[url] || storedCategory;
 
-    if (catList && !catList.includes(effectiveCat) && !writerCats.some(c => catList.includes(c))) continue;
+    if (catList && !catList.includes(effectiveCat)) continue;
 
     const profileLink = getProfileUrl(profileMap[writerName] || '');
-    const placedCat = (catList && !catList.includes(effectiveCat))
-      ? writerCats.find(c => catList.includes(c))
-      : effectiveCat;
+    const placedCat = effectiveCat;
 
     if (placedCat) {
       if (!catMap[placedCat]) catMap[placedCat] = {};
@@ -596,10 +630,13 @@ function loadArticles(fromD, toD, catFilter, digest, overrides) {
     }
     totalArticles++;
 
-    // Writers with 2+ categories: offer a per-article category choice
+    // Writers with 2+ categories: offer a per-article category choice.
+    // Only offered for articles already placed in this digest — picking a
+    // different category here moves the article OUT of this digest and
+    // into wherever that category actually belongs, next time it's generated.
     if (writerCats.length > 1 && !overrides[url]) {
       if (!multicatPending[writerName]) multicatPending[writerName] = { cats: writerCats, articles: [] };
-      multicatPending[writerName].articles.push({ title, url, current: placedCat || storedCategory });
+      multicatPending[writerName].articles.push({ title, url, current: effectiveCat });
     }
   }
 
