@@ -498,7 +498,7 @@ function buildMulticatSection(multicatList) {
       const nameDiv = document.createElement('div'); nameDiv.className = 'uncat-name';
       nameDiv.textContent = ai === 0 ? name : '';
       const artsDiv = document.createElement('div'); artsDiv.className = 'uncat-arts';
-      artsDiv.innerHTML = `<a href="${a.url}" target="_blank">${a.title}</a>`;
+      artsDiv.innerHTML = `<a href="${escHtml(a.url)}" target="_blank">${escHtml(a.title)}</a>`;
       const selDiv = document.createElement('div'); selDiv.className = 'uncat-sel';
       const sel = document.createElement('select');
       sel.style.cssText = 'font-size:12px;width:100%';
@@ -525,7 +525,7 @@ function buildUncatSection(uncatList) {
     const div = document.createElement('div'); div.className = 'uncat-row';
     const nameDiv = document.createElement('div'); nameDiv.className = 'uncat-name'; nameDiv.textContent = name;
     const artsDiv = document.createElement('div'); artsDiv.className = 'uncat-arts';
-    artsDiv.innerHTML = (articles || []).map(a => `<a href="${a.url}" target="_blank">${a.title}</a>`).join('');
+    artsDiv.innerHTML = (articles || []).map(a => `<a href="${escHtml(a.url)}" target="_blank">${escHtml(a.title)}</a>`).join('');
     const selDiv = document.createElement('div'); selDiv.className = 'uncat-sel';
     const sel = document.createElement('select');
     sel.style.cssText = 'font-size:12px;width:100%';
