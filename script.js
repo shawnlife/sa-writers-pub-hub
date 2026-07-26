@@ -19,6 +19,13 @@ const ORG_SHEET_LEGACY_NAME = 'Organization'; // pre-rename tab name — auto-mi
 const DIGEST_DOC_ID  = '1c865BZua0CQ1WkOCvoIgjLbn9Gx7MqrMQ_G4Kpm3mp4';
 const DAYS_TO_KEEP   = 90;
 
+// Shared secret checked on every action that writes data. The URL for this
+// web app is visible in index.html's public source (served via GitHub
+// Pages), so this isn't real access control — it just stops casual/
+// accidental discovery from being able to write. Must match WRITE_TOKEN in
+// index.html and sync/*.js exactly, including if it's ever rotated.
+const WRITE_TOKEN = '9a38c5817579e1da63c95fdea1edd33de0cc8e4221cae105';
+
 const NAME_COLOR    = '#e11c47';
 const ARTICLE_COLOR = '#000000';
 
@@ -120,12 +127,23 @@ const CATEGORY_IMAGES = {
 
 // ─── HTTP entry points ─────────────────────────────────────────────────────────
 
+// Actions that change data require WRITE_TOKEN; read-only actions
+// (preview, getOrganization, getWriters, the RSS proxy) stay open.
+const WRITE_ACTIONS = new Set([
+  'createDigest', 'updateCategory', 'addWriter', 'updateWriter',
+  'syncCategories', 'fixStaleArticleCategories', 'saveOrganization'
+]);
+
 function doGet(e) {
   const p = (e && e.parameter) || {};
   const action = p.action || '';
 
   // RSS proxy (legacy — keeps old URL?= calls working)
   if (p.url) return fetchRSS(p.url);
+
+  if (WRITE_ACTIONS.has(action) && p.token !== WRITE_TOKEN) {
+    return respond({ error: 'Unauthorized' });
+  }
 
   // Digest actions
   if (action === 'preview')       return respond(previewDigest(p.from, p.to, p.cat || '__all__', p.digest || ''));
@@ -152,6 +170,7 @@ function doGet(e) {
 function doPost(e) {
   try {
     const payload = JSON.parse(e.postData.contents);
+    if (payload.token !== WRITE_TOKEN) return respond({ error: 'Unauthorized' });
     const updates = payload.updates || [];
     if (!updates.length) return respond({ success: true, updated: 0 });
 

@@ -6,6 +6,8 @@
 //   SUBSTACK_TOKEN="your-connect-sid-value" node resolve-links.js
 
 const AS1_URL = 'https://script.google.com/macros/s/AKfycbzvdzFSv5d29zSfe5ddSiD2i2xEwAnYvZbaju5mvwgZUq_8zx76MlFS6zi5aQg1jltz/exec';
+// Must match WRITE_TOKEN in script.js exactly.
+const WRITE_TOKEN = '9a38c5817579e1da63c95fdea1edd33de0cc8e4221cae105';
 const DELAY_MS = 1200;
 
 async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -105,7 +107,7 @@ async function main() {
         const postResp = await fetch(AS1_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ updates }),
+          body: JSON.stringify({ updates, token: WRITE_TOKEN }),
           redirect: 'follow'
         });
         const r = await postResp.json();

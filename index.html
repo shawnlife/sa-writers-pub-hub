@@ -391,6 +391,9 @@ select:focus,input[type=date]:focus{outline:none;border-color:#e11c47}
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzvdzFSv5d29zSfe5ddSiD2i2xEwAnYvZbaju5mvwgZUq_8zx76MlFS6zi5aQg1jltz/exec';
 const AS1 = SCRIPT_URL;
 const AS2 = SCRIPT_URL;
+// Must match WRITE_TOKEN in script.js exactly — checked on every action that
+// writes data, so a stray link to this URL can't be used to edit the sheet.
+const WRITE_TOKEN = '9a38c5817579e1da63c95fdea1edd33de0cc8e4221cae105';
 
 // ============================================================
 let writers = [], allCats = [], lastResults = null, isRunning = false, lastDigestHtml = '', lastDocUrl = '', writerModalMode = 'add', multicatOverrides = {};
@@ -542,7 +545,7 @@ function buildUncatSection(uncatList) {
       saveBtn.textContent = 'Saving…'; saveBtn.disabled = true;
       try {
         // Script 1 updateCategory now updates BOTH Categorized tab AND Articles tab
-        const url = AS1 + '?action=updateCategory&name=' + encodeURIComponent(name) + '&category=' + encodeURIComponent(cat);
+        const url = AS1 + '?action=updateCategory&name=' + encodeURIComponent(name) + '&category=' + encodeURIComponent(cat) + '&token=' + encodeURIComponent(WRITE_TOKEN);
         const resp = await fetch(url);
         const data = await resp.json();
         if (data.success) {
@@ -568,7 +571,7 @@ async function createDoc() {
   $('creating-msg').style.display = 'block';
 
   try {
-    const url = AS2 + '?action=createDigest&from=' + encodeURIComponent(fv) + '&to=' + encodeURIComponent(tv) + '&cat=' + encodeURIComponent(catFilter) + '&digest=' + encodeURIComponent(digest || '') + '&overrides=' + encodeURIComponent(JSON.stringify(multicatOverrides));
+    const url = AS2 + '?action=createDigest&from=' + encodeURIComponent(fv) + '&to=' + encodeURIComponent(tv) + '&cat=' + encodeURIComponent(catFilter) + '&digest=' + encodeURIComponent(digest || '') + '&overrides=' + encodeURIComponent(JSON.stringify(multicatOverrides)) + '&token=' + encodeURIComponent(WRITE_TOKEN);
     const resp = await fetch(url, { signal: AbortSignal.timeout(120000) });
     const data = await resp.json();
     $('creating-msg').style.display = 'none';
@@ -666,10 +669,10 @@ async function saveWriterModal() {
   try {
     let url;
     if (writerModalMode === 'add') {
-      url = AS1 + '?action=addWriter&name=' + encodeURIComponent(name) + '&link=' + encodeURIComponent(link) + '&category=' + encodeURIComponent(category) + '&cat2=' + encodeURIComponent(cat2) + '&cat3=' + encodeURIComponent(cat3) + '&feeds=' + encodeURIComponent(feeds);
+      url = AS1 + '?action=addWriter&name=' + encodeURIComponent(name) + '&link=' + encodeURIComponent(link) + '&category=' + encodeURIComponent(category) + '&cat2=' + encodeURIComponent(cat2) + '&cat3=' + encodeURIComponent(cat3) + '&feeds=' + encodeURIComponent(feeds) + '&token=' + encodeURIComponent(WRITE_TOKEN);
     } else {
       const originalName = $('writer-modal-select').value;
-      url = AS1 + '?action=updateWriter&originalName=' + encodeURIComponent(originalName) + '&name=' + encodeURIComponent(name) + '&link=' + encodeURIComponent(link) + '&category=' + encodeURIComponent(category) + '&cat2=' + encodeURIComponent(cat2) + '&cat3=' + encodeURIComponent(cat3) + '&feeds=' + encodeURIComponent(feeds);
+      url = AS1 + '?action=updateWriter&originalName=' + encodeURIComponent(originalName) + '&name=' + encodeURIComponent(name) + '&link=' + encodeURIComponent(link) + '&category=' + encodeURIComponent(category) + '&cat2=' + encodeURIComponent(cat2) + '&cat3=' + encodeURIComponent(cat3) + '&feeds=' + encodeURIComponent(feeds) + '&token=' + encodeURIComponent(WRITE_TOKEN);
     }
     const resp = await fetch(url);
     const data = await resp.json();
@@ -739,7 +742,7 @@ async function saveBulkModal() {
     const e = entries[i];
     $('bulk-modal-status').textContent = `Saving ${i + 1}/${entries.length}…`; $('bulk-modal-status').className = 'status';
     try {
-      const url = AS1 + '?action=addWriter&name=' + encodeURIComponent(e.name) + '&link=' + encodeURIComponent(e.link) + '&category=' + encodeURIComponent(e.category) + '&cat2=' + encodeURIComponent(e.cat2) + '&cat3=' + encodeURIComponent(e.cat3) + '&feeds=' + encodeURIComponent(e.feeds);
+      const url = AS1 + '?action=addWriter&name=' + encodeURIComponent(e.name) + '&link=' + encodeURIComponent(e.link) + '&category=' + encodeURIComponent(e.category) + '&cat2=' + encodeURIComponent(e.cat2) + '&cat3=' + encodeURIComponent(e.cat3) + '&feeds=' + encodeURIComponent(e.feeds) + '&token=' + encodeURIComponent(WRITE_TOKEN);
       const resp = await fetch(url);
       const data = await resp.json();
       if (data.success) ok++; else failed.push(e.name + ': ' + (data.error || 'unknown error'));
@@ -1023,7 +1026,7 @@ function addOrgCategory() {
 async function saveOrganization() {
   $('org-status').textContent = 'Saving…'; $('org-status').className = 'status';
   try {
-    const url = AS1 + '?action=saveOrganization&digests=' + encodeURIComponent(JSON.stringify(orgDigests));
+    const url = AS1 + '?action=saveOrganization&digests=' + encodeURIComponent(JSON.stringify(orgDigests)) + '&token=' + encodeURIComponent(WRITE_TOKEN);
     const resp = await fetch(url, { signal: AbortSignal.timeout(20000) });
     const data = await resp.json();
     if (!data.success) throw new Error(data.error || 'Unknown error');
