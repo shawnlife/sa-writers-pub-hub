@@ -425,6 +425,13 @@ const RSS_HEADERS = {
 };
 
 function syncRSS() {
+  // Mark that a run has started, but not yet finished. If Apps Script kills
+  // this run for running too long, there's no way to catch that from inside
+  // the function — the platform just terminates it. syncRSSRetryCheck (run
+  // ~1 hour later by its own trigger) looks for exactly this signature —
+  // started but never finished — and retries once.
+  PropertiesService.getScriptProperties().setProperty('syncRSSStarted', new Date().toISOString());
+
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const writersSheet  = ss.getSheetByName(WRITERS_SHEET);
   const articlesSheet = ss.getSheetByName(ARTICLES_SHEET);
@@ -558,6 +565,40 @@ function syncRSS() {
   }
 
   console.log(`Sync done. ${fetched} feeds OK, ${failed} failed. Added ${newRows.length} articles.`);
+  PropertiesService.getScriptProperties().setProperty('syncRSSFinished', new Date().toISOString());
+}
+
+// Run this by its own trigger about an hour after the nightly syncRSS
+// trigger. If the last run started but the "finished" marker is missing or
+// older than that start time, syncRSS got killed mid-run (almost always
+// "exceeded maximum execution time") — retry it once. Does nothing if the
+// last run completed normally.
+function syncRSSRetryCheck() {
+  const props = PropertiesService.getScriptProperties();
+  const started = props.getProperty('syncRSSStarted');
+  const finished = props.getProperty('syncRSSFinished');
+  if (started && (!finished || new Date(finished) < new Date(started))) {
+    console.log(`Previous syncRSS run (started ${started}) never finished — retrying now.`);
+    syncRSS();
+  } else {
+    console.log('Previous syncRSS run finished normally — no retry needed.');
+  }
+}
+
+// One-time setup — run this once from the Apps Script editor (function
+// dropdown → syncRSSRetryCheck's setup, i.e. this function → Run) to create
+// the retry trigger. Safe to re-run: clears any existing one first so it's
+// never duplicated.
+function setupSyncRetryTrigger() {
+  ScriptApp.getProjectTriggers()
+    .filter(t => t.getHandlerFunction() === 'syncRSSRetryCheck')
+    .forEach(t => ScriptApp.deleteTrigger(t));
+  ScriptApp.newTrigger('syncRSSRetryCheck')
+    .timeBased()
+    .atHour(3)
+    .everyDays(1)
+    .create();
+  console.log('syncRSSRetryCheck trigger created — runs daily around 3am.');
 }
 
 function parseRSS(xml) {
