@@ -791,8 +791,9 @@ function ensureUncatBucket() {
   if (!orgDigests[UNCAT_NAME]) orgDigests[UNCAT_NAME] = [];
 }
 
-// "Unmatched" = sitting in Uncategorized, or missing from Organization data entirely
-// (e.g. from a direct sheet edit) — either way it needs a home in a real digest.
+// "Unmatched" = missing from every real digest — could already be sitting in
+// Uncategorized, or (e.g. after a direct sheet edit) not recorded anywhere
+// in Organization data at all.
 let orphanModalDismissed = false;
 function computeOrphanCats() {
   if (!allCats.length || !Object.keys(orgDigests).length) return [];
@@ -804,10 +805,26 @@ function computeOrphanCats() {
   return allCats.filter(c => !placed.has(c));
 }
 
-function checkOrphanCategories() {
-  if (orphanModalDismissed) return;
+function writersInCategory(cat) {
+  return writers.filter(w => [w.cat1, w.cat2, w.cat3].includes(cat)).map(w => w.name);
+}
+
+async function checkOrphanCategories() {
   const orphans = computeOrphanCats();
   if (!orphans.length) return;
+
+  // Make the Categories tab the single source of truth: any category used by
+  // a writer but not grouped into a digest must physically show up under
+  // Uncategorized, not just float in this popup until someone clicks Save.
+  ensureUncatBucket();
+  const newlyAdded = orphans.filter(c => !orgDigests[UNCAT_NAME].includes(c));
+  if (newlyAdded.length) {
+    newlyAdded.forEach(c => orgDigests[UNCAT_NAME].push(c));
+    await saveOrganization();
+    if ($('tab-org').style.display !== 'none') renderOrgBoard();
+  }
+
+  if (orphanModalDismissed) return;
   renderOrphanModal(orphans);
 }
 
@@ -817,15 +834,55 @@ function renderOrphanModal(orphans) {
   const list = $('orphan-list');
   list.innerHTML = '';
   orphans.forEach(cat => {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'border:1px solid #eee;border-radius:10px;padding:10px';
+    wrap.dataset.cat = cat;
+
+    const title = document.createElement('div');
+    title.style.cssText = 'font-size:13px;font-weight:600;margin-bottom:2px';
+    title.textContent = cat;
+    wrap.appendChild(title);
+
+    const usedBy = writersInCategory(cat);
+    const usedByDiv = document.createElement('div');
+    usedByDiv.style.cssText = 'font-size:11px;color:#888;margin-bottom:8px';
+    usedByDiv.textContent = usedBy.length ? `Used by: ${usedBy.join(', ')}` : 'Not currently used by any writer';
+    wrap.appendChild(usedByDiv);
+
     const row = document.createElement('div');
     row.style.cssText = 'display:flex;align-items:center;gap:8px';
-    const label = document.createElement('div');
-    label.style.cssText = 'flex:1;font-size:13px'; label.textContent = cat;
     const sel = document.createElement('select');
-    sel.dataset.cat = cat; sel.style.cssText = 'font-size:12px;flex:1';
+    sel.className = 'orphan-assign-sel';
+    sel.style.cssText = 'font-size:12px;flex:1';
     sel.innerHTML = digestNames.map(d => `<option value="${escHtml(d)}">${escHtml(d)}</option>`).join('');
-    row.appendChild(label); row.appendChild(sel);
-    list.appendChild(row);
+    row.appendChild(sel);
+    wrap.appendChild(row);
+
+    const renameToggle = document.createElement('a');
+    renameToggle.href = '#';
+    renameToggle.textContent = 'Rename this category instead →';
+    renameToggle.style.cssText = 'display:inline-block;font-size:11px;color:#e11c47;margin-top:6px;text-decoration:none';
+    const renameRow = document.createElement('div');
+    renameRow.style.cssText = 'display:none;margin-top:6px';
+    const renameInput = document.createElement('input');
+    renameInput.type = 'text';
+    renameInput.className = 'orphan-rename-input';
+    renameInput.placeholder = 'Correct category name…';
+    renameInput.style.cssText = 'font-size:12px;width:100%;border:0.5px solid #ddd;border-radius:8px;padding:6px 8px;font-family:inherit';
+    renameRow.appendChild(renameInput);
+
+    renameToggle.onclick = e => {
+      e.preventDefault();
+      const renaming = renameRow.style.display === 'none';
+      renameRow.style.display = renaming ? 'block' : 'none';
+      row.style.display = renaming ? 'none' : 'flex';
+      renameToggle.textContent = renaming ? '← Assign to a digest instead' : 'Rename this category instead →';
+      if (renaming) renameInput.focus();
+    };
+    wrap.appendChild(renameToggle);
+    wrap.appendChild(renameRow);
+
+    list.appendChild(wrap);
   });
   $('orphan-modal-overlay').style.display = 'flex';
 }
@@ -836,15 +893,50 @@ function closeOrphanModal() {
 }
 
 async function saveOrphanAssignments() {
-  [...$('orphan-list').children].forEach(row => {
-    const sel = row.querySelector('select');
-    const cat = sel.dataset.cat, dest = sel.value;
-    ensureUncatBucket();
-    orgDigests[UNCAT_NAME] = orgDigests[UNCAT_NAME].filter(c => c !== cat);
-    if (!orgDigests[dest].includes(cat)) orgDigests[dest].push(cat);
+  const rows = [...$('orphan-list').children];
+  const renameJobs = [], assignJobs = [];
+  rows.forEach(wrap => {
+    const cat = wrap.dataset.cat;
+    const renameInput = wrap.querySelector('.orphan-rename-input');
+    const renameVisible = renameInput.parentElement.style.display !== 'none';
+    const newName = renameInput.value.trim();
+    if (renameVisible && newName) renameJobs.push({ cat, newName });
+    else assignJobs.push({ cat, dest: wrap.querySelector('.orphan-assign-sel').value });
   });
+
+  let renamedCount = 0;
+  for (const { cat, newName } of renameJobs) {
+    try {
+      const url = AS1 + '?action=renameCategory&oldName=' + encodeURIComponent(cat) + '&newName=' + encodeURIComponent(newName) + '&token=' + encodeURIComponent(WRITE_TOKEN);
+      const resp = await fetch(url, { signal: AbortSignal.timeout(30000) });
+      const data = await resp.json();
+      if (data.success) renamedCount++;
+    } catch (e) {}
+  }
+
   $('orphan-modal-overlay').style.display = 'none';
-  await saveOrganization();
+
+  if (renamedCount > 0) {
+    // renameCategory already updated the Categories sheet server-side —
+    // pull fresh state instead of overwriting it with our stale local copy.
+    await loadSheet();
+    try {
+      const resp = await fetch(AS1 + '?action=getOrganization', { signal: AbortSignal.timeout(20000) });
+      const data = await resp.json();
+      if (data.success) { orgDigests = data.digests || {}; ensureUncatBucket(); populateDigestDropdown(); }
+    } catch (e) {}
+  }
+
+  if (assignJobs.length) {
+    ensureUncatBucket();
+    assignJobs.forEach(({ cat, dest }) => {
+      orgDigests[UNCAT_NAME] = orgDigests[UNCAT_NAME].filter(c => c !== cat);
+      if (!orgDigests[dest]) orgDigests[dest] = [];
+      if (!orgDigests[dest].includes(cat)) orgDigests[dest].push(cat);
+    });
+    await saveOrganization();
+  }
+
   if ($('tab-org').style.display !== 'none') renderOrgBoard();
 }
 

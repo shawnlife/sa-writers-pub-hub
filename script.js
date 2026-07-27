@@ -131,7 +131,7 @@ const CATEGORY_IMAGES = {
 // (preview, getOrganization, getWriters, the RSS proxy) stay open.
 const WRITE_ACTIONS = new Set([
   'createDigest', 'updateCategory', 'addWriter', 'updateWriter',
-  'syncCategories', 'fixStaleArticleCategories', 'saveOrganization'
+  'syncCategories', 'fixStaleArticleCategories', 'saveOrganization', 'renameCategory'
 ]);
 
 function doGet(e) {
@@ -155,6 +155,7 @@ function doGet(e) {
   if (action === 'updateWriter')   return updateWriter(p.originalName, p.name, p.link, p.category, p.cat2, p.cat3, p.feeds);
   if (action === 'syncCategories') return syncCategories();
   if (action === 'fixStaleArticleCategories') return fixStaleArticleCategories();
+  if (action === 'renameCategory') return renameCategory(p.oldName, p.newName);
 
   // Organization (digest structure) actions
   if (action === 'getOrganization')  return getOrganization();
@@ -383,6 +384,72 @@ function syncCategories() {
       }
     }
     return respond({ success: true, updated });
+  } catch (e) {
+    return respond({ error: e.message });
+  }
+}
+
+// Renames a category everywhere it's used: every writer's cat1/2/3, every
+// article's stored category, and wherever it sits in the Categories sheet
+// (usually Uncategorized). If a writer already has the new name in another
+// slot, the old slot is cleared instead of creating a duplicate tag.
+function renameCategory(oldName, newName) {
+  try {
+    oldName = (oldName || '').toString().trim();
+    newName = (newName || '').toString().trim();
+    if (!oldName || !newName) return respond({ error: 'Missing oldName or newName' });
+    if (oldName === newName) return respond({ success: true, writersUpdated: 0, articlesUpdated: 0 });
+
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+    // Writers sheet
+    const wSheet = ss.getSheetByName(WRITERS_SHEET);
+    const wRows = wSheet.getDataRange().getValues();
+    const wh = wRows[0].map(x => x.toString().toLowerCase().trim());
+    const catIdx = wh.reduce((a, x, i) => { if (x.includes('cat')) a.push(i); return a; }, []);
+    let writersUpdated = 0;
+    for (let i = 1; i < wRows.length; i++) {
+      const slots = catIdx.map(ci => (wRows[i][ci] || '').toString().trim());
+      if (!slots.includes(oldName)) continue;
+      const renamed = slots.map(s => s === oldName ? newName : s);
+      // Dedupe: if newName now appears twice, blank the later occurrence
+      const seen = new Set();
+      const deduped = renamed.map(s => {
+        if (!s) return s;
+        if (seen.has(s)) return '';
+        seen.add(s);
+        return s;
+      });
+      catIdx.forEach((ci, idx) => wSheet.getRange(i + 1, ci + 1).setValue(deduped[idx]));
+      writersUpdated++;
+    }
+
+    // Articles sheet
+    const aSheet = ss.getSheetByName(ARTICLES_SHEET);
+    const aRows = aSheet.getDataRange().getValues();
+    let articlesUpdated = 0;
+    for (let i = 1; i < aRows.length; i++) {
+      if ((aRows[i][1] || '').toString().trim() === oldName) {
+        aSheet.getRange(i + 1, 2).setValue(newName);
+        articlesUpdated++;
+      }
+    }
+
+    // Categories sheet — rename in place wherever it appears; if the
+    // destination digest already has newName, drop the old chip instead of
+    // duplicating it.
+    const digestMap = loadDigestMap(ss);
+    let orgChanged = false;
+    Object.keys(digestMap).forEach(digest => {
+      const idx = digestMap[digest].indexOf(oldName);
+      if (idx === -1) return;
+      orgChanged = true;
+      if (digestMap[digest].includes(newName)) digestMap[digest].splice(idx, 1);
+      else digestMap[digest][idx] = newName;
+    });
+    if (orgChanged) writeDigestMap(ensureOrgSheet(ss), digestMap);
+
+    return respond({ success: true, writersUpdated, articlesUpdated });
   } catch (e) {
     return respond({ error: e.message });
   }
