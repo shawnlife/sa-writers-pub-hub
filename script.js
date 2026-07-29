@@ -653,9 +653,30 @@ function syncRSSRetryCheck() {
 }
 
 // One-time setup — run this once from the Apps Script editor (function
-// dropdown → syncRSSRetryCheck's setup, i.e. this function → Run) to create
-// the retry trigger. Safe to re-run: clears any existing one first so it's
-// never duplicated.
+// dropdown → setupSyncRSSTrigger → Run) to (re)create the main nightly sync
+// trigger. Safe to re-run: clears any existing one first so it's never
+// duplicated. Uses nearMinute() to land off the top of the hour — the
+// Triggers UI only offers hour-wide windows, but a huge number of Apps
+// Script jobs worldwide are scheduled for round hours (exactly 2:00, 3:00,
+// etc.), and Google's shared infrastructure can be measurably slower during
+// those pile-up windows. Landing at :41 instead of :00 is a cheap way to
+// dodge some of that contention.
+function setupSyncRSSTrigger() {
+  ScriptApp.getProjectTriggers()
+    .filter(t => t.getHandlerFunction() === 'syncRSS')
+    .forEach(t => ScriptApp.deleteTrigger(t));
+  ScriptApp.newTrigger('syncRSS')
+    .timeBased()
+    .atHour(2)
+    .nearMinute(41)
+    .everyDays(1)
+    .create();
+  console.log('syncRSS trigger created — runs daily near 2:41am.');
+}
+
+// One-time setup — run this once from the Apps Script editor (function
+// dropdown → setupSyncRetryTrigger → Run) to create the retry trigger. Safe
+// to re-run: clears any existing one first so it's never duplicated.
 function setupSyncRetryTrigger() {
   ScriptApp.getProjectTriggers()
     .filter(t => t.getHandlerFunction() === 'syncRSSRetryCheck')
@@ -663,9 +684,10 @@ function setupSyncRetryTrigger() {
   ScriptApp.newTrigger('syncRSSRetryCheck')
     .timeBased()
     .atHour(3)
+    .nearMinute(41)
     .everyDays(1)
     .create();
-  console.log('syncRSSRetryCheck trigger created — runs daily around 3am.');
+  console.log('syncRSSRetryCheck trigger created — runs daily near 3:41am.');
 }
 
 function parseRSS(xml) {
