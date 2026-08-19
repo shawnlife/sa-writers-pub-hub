@@ -139,10 +139,30 @@ select:focus,input[type=date]:focus{outline:none;border-color:#e11c47}
 .org-chip-x:hover{color:#e11c47}
 .org-col-body.drag-over{background:#fdeef0;border-radius:8px;outline:2px dashed #e11c47;outline-offset:2px}
 .org-unassigned{margin-top:6px;padding:8px 4px 2px;border-top:1px dashed #ddd}
+
+#auth-gate{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#faf9f7;z-index:100;padding:1rem}
+.auth-box{max-width:340px;width:100%;text-align:center}
+.auth-flag{font-size:40px;margin-bottom:.5rem}
+.auth-box h1{font-size:20px;font-weight:600;margin-bottom:6px}
+.auth-box p{font-size:13px;color:#888;margin-bottom:1.25rem}
+#auth-pw{width:100%;font-family:inherit;border:0.5px solid #ddd;border-radius:10px;padding:10px 12px;font-size:14px;text-align:center}
+#auth-err{display:none;color:#dc2626;font-size:12px;margin-top:10px}
 </style>
 </head>
 <body>
-<div class="outer">
+
+<div id="auth-gate">
+  <div class="auth-box">
+    <div class="auth-flag">🇿🇦</div>
+    <h1>SA Writers' Pub Hub</h1>
+    <p>Private tool — enter the password to continue.</p>
+    <input type="password" id="auth-pw" placeholder="Password" autocomplete="off">
+    <button class="btn-primary" style="margin-top:10px" onclick="checkAuthPw()">Enter</button>
+    <div id="auth-err">Incorrect password.</div>
+  </div>
+</div>
+
+<div class="outer" id="main-app" style="display:none">
 
   <div class="header">
     <div class="header-text">
@@ -384,6 +404,8 @@ select:focus,input[type=date]:focus{outline:none;border-color:#e11c47}
 <footer style="text-align:center;padding:1.5rem 1rem;font-size:12px;color:#aaa">Tool made using AI vibe-coding by <a href="https://shawnlife.com" target="_blank" style="color:#aaa;text-decoration:underline">ShawnLife</a></footer>
 
 <script>
+const $ = id => document.getElementById(id);
+
 // ============================================================
 // CONFIGURATION — paste the deployed /exec URL here after deploying script.js
 // Both AS1 and AS2 now point to the same single script.
@@ -391,14 +413,50 @@ select:focus,input[type=date]:focus{outline:none;border-color:#e11c47}
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzvdzFSv5d29zSfe5ddSiD2i2xEwAnYvZbaju5mvwgZUq_8zx76MlFS6zi5aQg1jltz/exec';
 const AS1 = SCRIPT_URL;
 const AS2 = SCRIPT_URL;
-// Must match WRITE_TOKEN in script.js exactly — checked on every action that
-// writes data, so a stray link to this URL can't be used to edit the sheet.
-const WRITE_TOKEN = '9a38c5817579e1da63c95fdea1edd33de0cc8e4221cae105';
+// Set only after the password screen is passed — its value is the SHA-256
+// hash of the password (see the AUTH block below), sent with every request
+// (read and write) and checked server-side in script.js. Until unlock(), no
+// request carries a valid token, so nothing behind the password screen can
+// be reached even by someone who has this page's raw source.
+let WRITE_TOKEN = null;
+
+// ============================================================ AUTH
+// SHA-256 hash of the password, not the plaintext — anyone who views source
+// doesn't see the password directly. This is not real server-side auth:
+// anyone who knows the password (or brute-forces this hash) can still get
+// in. What it does stop is a random person who finds this URL from ever
+// seeing the tool or being able to call the backend at all — the hash IS
+// the token every request needs, and nothing computes it before login.
+const PW_HASH = '696a99e173a0672904cba3ae5fa5883bd8b06276e70372eedc3af2f528df3bad';
+async function sha256Hex(text) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+async function checkAuthPw() {
+  const typed = $('auth-pw').value;
+  const hash = await sha256Hex(typed);
+  if (hash === PW_HASH) {
+    WRITE_TOKEN = hash;
+    localStorage.setItem('sawph_auth', hash);
+    unlock();
+  } else {
+    $('auth-err').style.display = 'block';
+  }
+}
+function unlock() {
+  $('auth-gate').style.display = 'none';
+  $('main-app').style.display = 'block';
+  initApp();
+}
+$('auth-pw').addEventListener('keydown', e => { if (e.key === 'Enter') checkAuthPw(); });
+(async () => {
+  const saved = localStorage.getItem('sawph_auth');
+  if (saved && saved === PW_HASH) { WRITE_TOKEN = saved; unlock(); }
+})();
 
 // ============================================================
 let writers = [], allCats = [], lastResults = null, isRunning = false, lastDigestHtml = '', lastDocUrl = '', writerModalMode = 'add', multicatOverrides = {};
 let orgDigests = {}, orgDragChip = null, orgDragFrom = null;
-const $ = id => document.getElementById(id);
 
 function setDot(s) { $('dot').className = 'dot ' + (s === 'ok' ? 'ok' : s === 'err' ? 'err' : 'spin'); }
 function setStatus(t, err = false) { $('status').textContent = t; $('status').className = 'status' + (err ? ' err' : ''); }
@@ -408,7 +466,7 @@ async function loadSheet() {
   setDot('spin'); $('sheet-lbl').textContent = 'Loading writer list…';
   setStatus('Loading writer list…'); $('gen-btn').disabled = true;
   try {
-    const resp = await fetch(AS1);
+    const resp = await fetch(AS1 + '?token=' + encodeURIComponent(WRITE_TOKEN));
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const data = await resp.json();
     if (!Array.isArray(data)) throw new Error('Unexpected response');
@@ -465,7 +523,7 @@ async function generate() {
   setStatus('Querying article database…');
 
   try {
-    const url = AS2 + '?action=preview&from=' + encodeURIComponent(fv) + '&to=' + encodeURIComponent(tv) + '&cat=' + encodeURIComponent(catFilter) + '&digest=' + encodeURIComponent(digest);
+    const url = AS2 + '?action=preview&from=' + encodeURIComponent(fv) + '&to=' + encodeURIComponent(tv) + '&cat=' + encodeURIComponent(catFilter) + '&digest=' + encodeURIComponent(digest) + '&token=' + encodeURIComponent(WRITE_TOKEN);
     const resp = await fetch(url, { signal: AbortSignal.timeout(30000) });
     const data = await resp.json();
     if (!data.success) throw new Error(data.error || 'Unknown error');
@@ -772,10 +830,14 @@ $('d-from').max = maxDate;
 $('d-to').max = maxDate;
 $('d-to').value = maxDate;
 $('d-from').value = twoWeeksAgo.toISOString().split('T')[0];
-(async () => {
+// Runs only after the password screen is passed — see the AUTH block above,
+// which calls this from unlock(). Nothing here fires on page load anymore,
+// so no data request happens (and no token exists to make one succeed)
+// until the password check has already passed.
+async function initApp() {
   await loadSheet();
   try {
-    const resp = await fetch(AS1 + '?action=getOrganization', { signal: AbortSignal.timeout(20000) });
+    const resp = await fetch(AS1 + '?action=getOrganization&token=' + encodeURIComponent(WRITE_TOKEN), { signal: AbortSignal.timeout(20000) });
     const data = await resp.json();
     if (data.success) {
       orgDigests = data.digests || {};
@@ -784,7 +846,7 @@ $('d-from').value = twoWeeksAgo.toISOString().split('T')[0];
       checkOrphanCategories();
     }
   } catch (e) {}
-})();
+}
 
 const UNCAT_NAME = 'Uncategorized';
 function ensureUncatBucket() {
@@ -921,7 +983,7 @@ async function saveOrphanAssignments() {
     // pull fresh state instead of overwriting it with our stale local copy.
     await loadSheet();
     try {
-      const resp = await fetch(AS1 + '?action=getOrganization', { signal: AbortSignal.timeout(20000) });
+      const resp = await fetch(AS1 + '?action=getOrganization&token=' + encodeURIComponent(WRITE_TOKEN), { signal: AbortSignal.timeout(20000) });
       const data = await resp.json();
       if (data.success) { orgDigests = data.digests || {}; ensureUncatBucket(); populateDigestDropdown(); }
     } catch (e) {}
@@ -978,7 +1040,7 @@ function populateDigestDropdown() {
 async function loadOrganization() {
   $('org-status').textContent = 'Loading…'; $('org-status').className = 'status';
   try {
-    const resp = await fetch(AS1 + '?action=getOrganization', { signal: AbortSignal.timeout(20000) });
+    const resp = await fetch(AS1 + '?action=getOrganization&token=' + encodeURIComponent(WRITE_TOKEN), { signal: AbortSignal.timeout(20000) });
     const data = await resp.json();
     if (!data.success) throw new Error(data.error || 'Unknown error');
     orgDigests = data.digests || {};

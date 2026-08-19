@@ -19,12 +19,17 @@ const ORG_SHEET_LEGACY_NAME = 'Organization'; // pre-rename tab name — auto-mi
 const DIGEST_DOC_ID  = '1c865BZua0CQ1WkOCvoIgjLbn9Gx7MqrMQ_G4Kpm3mp4';
 const DAYS_TO_KEEP   = 90;
 
-// Shared secret checked on every action that writes data. The URL for this
-// web app is visible in index.html's public source (served via GitHub
-// Pages), so this isn't real access control — it just stops casual/
-// accidental discovery from being able to write. Must match WRITE_TOKEN in
-// index.html and sync/*.js exactly, including if it's ever rotated.
-const WRITE_TOKEN = '9a38c5817579e1da63c95fdea1edd33de0cc8e4221cae105';
+// Shared secret checked on every request, read or write. This is the SHA-256
+// hash of the password shown on index.html's login screen — the frontend
+// only ever computes and sends this hash after the password is entered
+// correctly, so nothing here works until that screen is passed. The URL for
+// this web app is still visible in index.html's public source (served via
+// GitHub Pages) so this isn't real server-side auth, but combined with the
+// password screen, a random visitor can no longer read or write anything —
+// they'd have to find the URL AND either know the password or reverse the
+// hash. Must match PW_HASH in index.html and the token in sync/*.js exactly,
+// including if it's ever rotated.
+const WRITE_TOKEN = '696a99e173a0672904cba3ae5fa5883bd8b06276e70372eedc3af2f528df3bad';
 
 const NAME_COLOR    = '#e11c47';
 const ARTICLE_COLOR = '#000000';
@@ -127,23 +132,19 @@ const CATEGORY_IMAGES = {
 
 // ─── HTTP entry points ─────────────────────────────────────────────────────────
 
-// Actions that change data require WRITE_TOKEN; read-only actions
-// (preview, getOrganization, getWriters, the RSS proxy) stay open.
-const WRITE_ACTIONS = new Set([
-  'createDigest', 'updateCategory', 'addWriter', 'updateWriter',
-  'syncCategories', 'fixStaleArticleCategories', 'saveOrganization', 'renameCategory'
-]);
-
 function doGet(e) {
   const p = (e && e.parameter) || {};
   const action = p.action || '';
 
-  // RSS proxy (legacy — keeps old URL?= calls working)
-  if (p.url) return fetchRSS(p.url);
-
-  if (WRITE_ACTIONS.has(action) && p.token !== WRITE_TOKEN) {
+  // Every request — read or write — requires the token now that the
+  // frontend sits behind a password screen. Nothing is exempted: not the
+  // default writer list, not preview, not the legacy RSS proxy.
+  if (p.token !== WRITE_TOKEN) {
     return respond({ error: 'Unauthorized' });
   }
+
+  // RSS proxy (legacy — keeps old URL?= calls working)
+  if (p.url) return fetchRSS(p.url);
 
   // Digest actions
   if (action === 'preview')       return respond(previewDigest(p.from, p.to, p.cat || '__all__', p.digest || ''));

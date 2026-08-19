@@ -6,8 +6,9 @@
 //   SUBSTACK_TOKEN="your-connect-sid-value" node resolve-links.js
 
 const AS1_URL = 'https://script.google.com/macros/s/AKfycbzvdzFSv5d29zSfe5ddSiD2i2xEwAnYvZbaju5mvwgZUq_8zx76MlFS6zi5aQg1jltz/exec';
-// Must match WRITE_TOKEN in script.js exactly.
-const WRITE_TOKEN = '9a38c5817579e1da63c95fdea1edd33de0cc8e4221cae105';
+// Must match WRITE_TOKEN in script.js exactly (the SHA-256 hash of the
+// index.html login password).
+const WRITE_TOKEN = '696a99e173a0672904cba3ae5fa5883bd8b06276e70372eedc3af2f528df3bad';
 const DELAY_MS = 1200;
 
 async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -71,7 +72,7 @@ async function main() {
   }
 
   console.log('Loading writers from sheet…');
-  const resp = await fetch(AS1_URL);
+  const resp = await fetch(AS1_URL + '?token=' + WRITE_TOKEN);
   const writers = await resp.json();
   if (!Array.isArray(writers)) throw new Error('Bad response: ' + JSON.stringify(writers));
 
