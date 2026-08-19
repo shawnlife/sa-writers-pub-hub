@@ -427,7 +427,7 @@ let WRITE_TOKEN = null;
 // in. What it does stop is a random person who finds this URL from ever
 // seeing the tool or being able to call the backend at all — the hash IS
 // the token every request needs, and nothing computes it before login.
-const PW_HASH = '696a99e173a0672904cba3ae5fa5883bd8b06276e70372eedc3af2f528df3bad';
+const PW_HASH = 'ce9852646cc9646e24db3ed779c9ff7c70a21cd51b99ea7c729d89bd62e94881';
 async function sha256Hex(text) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');

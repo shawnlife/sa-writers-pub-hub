@@ -8,7 +8,7 @@ import Parser from 'rss-parser';
 const AS1_URL = 'https://script.google.com/macros/s/AKfycbzvdzFSv5d29zSfe5ddSiD2i2xEwAnYvZbaju5mvwgZUq_8zx76MlFS6zi5aQg1jltz/exec';
 // Must match WRITE_TOKEN in script.js exactly (the SHA-256 hash of the
 // index.html login password).
-const WRITE_TOKEN = '696a99e173a0672904cba3ae5fa5883bd8b06276e70372eedc3af2f528df3bad';
+const WRITE_TOKEN = 'ce9852646cc9646e24db3ed779c9ff7c70a21cd51b99ea7c729d89bd62e94881';
 const CONCURRENCY = 10;
 const FEED_TIMEOUT_MS = 10000;
 

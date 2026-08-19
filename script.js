@@ -29,7 +29,7 @@ const DAYS_TO_KEEP   = 90;
 // they'd have to find the URL AND either know the password or reverse the
 // hash. Must match PW_HASH in index.html and the token in sync/*.js exactly,
 // including if it's ever rotated.
-const WRITE_TOKEN = '696a99e173a0672904cba3ae5fa5883bd8b06276e70372eedc3af2f528df3bad';
+const WRITE_TOKEN = 'ce9852646cc9646e24db3ed779c9ff7c70a21cd51b99ea7c729d89bd62e94881';
 
 const NAME_COLOR    = '#e11c47';
 const ARTICLE_COLOR = '#000000';
