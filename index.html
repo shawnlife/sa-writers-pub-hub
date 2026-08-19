@@ -451,7 +451,20 @@ function unlock() {
 $('auth-pw').addEventListener('keydown', e => { if (e.key === 'Enter') checkAuthPw(); });
 (async () => {
   const saved = localStorage.getItem('sawph_auth');
-  if (saved && saved === PW_HASH) { WRITE_TOKEN = saved; unlock(); }
+  if (saved && saved === PW_HASH) { WRITE_TOKEN = saved; unlock(); return; }
+
+  // One-click login link: https://.../#the-password — lets you send Jen a
+  // single link with nothing to type. Checked after localStorage so a
+  // bookmarked/old link doesn't re-prompt someone already logged in.
+  const hashFrag = window.location.hash.replace('#', '');
+  if (hashFrag) {
+    const hash = await sha256Hex(decodeURIComponent(hashFrag));
+    if (hash === PW_HASH) {
+      WRITE_TOKEN = hash;
+      localStorage.setItem('sawph_auth', hash);
+      unlock();
+    }
+  }
 })();
 
 // ============================================================
