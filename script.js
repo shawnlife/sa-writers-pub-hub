@@ -136,9 +136,14 @@ function doGet(e) {
   const p = (e && e.parameter) || {};
   const action = p.action || '';
 
-  // Every request — read or write — requires the token now that the
-  // frontend sits behind a password screen. Nothing is exempted: not the
-  // default writer list, not preview, not the legacy RSS proxy.
+  // The ONE deliberate exception to "every request needs the token": a
+  // headline-numbers-only read for the Vibe Dashboard (writer count + most
+  // recent post date, no names/links/categories).
+  if (action === 'publicStats') return getPublicStats();
+
+  // Every other request, read or write, requires the token now that the
+  // frontend sits behind a password screen. Nothing else is exempted: not
+  // the default writer list, not preview, not the legacy RSS proxy.
   if (p.token !== WRITE_TOKEN) {
     return respond({ error: 'Unauthorized' });
   }
@@ -211,6 +216,28 @@ function respond(obj) {
 }
 
 // ─── Writer CRUD ───────────────────────────────────────────────────────────────
+
+// Unauthenticated on purpose (see the publicStats exception in doGet): only
+// returns the writer count and the most recent Last Post date, nothing that
+// identifies a writer.
+function getPublicStats() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(WRITERS_SHEET);
+  const rows = sheet.getDataRange().getValues();
+  const h = rows[0].map(x => x.toString().toLowerCase().trim());
+  const ni = h.findIndex(x => x.includes('name'));
+  const lpi = h.findIndex(x => x.includes('last') && x.includes('post'));
+  const writers = rows.slice(1).filter(r => r[ni] && r[ni].toString().trim());
+  let mostRecent = '';
+  writers.forEach(r => {
+    const v = lpi >= 0 && r[lpi]
+      ? (r[lpi] instanceof Date ? Utilities.formatDate(r[lpi], Session.getScriptTimeZone(), 'yyyy-MM-dd') : r[lpi].toString().trim())
+      : '';
+    // Only real dates count: "no posts found" / "no publication" would
+    // otherwise win the string comparison ("n" sorts after any digit).
+    if (/^\d{4}-\d{2}-\d{2}$/.test(v) && v > mostRecent) mostRecent = v;
+  });
+  return respond({ count: writers.length, mostRecent: mostRecent });
+}
 
 function getWriters() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(WRITERS_SHEET);
