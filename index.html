@@ -157,8 +157,8 @@ select:focus,input[type=date]:focus{outline:none;border-color:#e11c47}
     <h1>SA Writers' Pub Hub</h1>
     <p>Private tool — enter the password to continue.</p>
     <input type="password" id="auth-pw" placeholder="Password" autocomplete="off">
-    <button class="btn-primary" style="margin-top:10px" onclick="checkAuthPw()">Enter</button>
-    <div id="auth-err">Incorrect password.</div>
+    <button class="btn-primary" id="auth-btn" style="margin-top:10px" onclick="checkAuthPw()">Enter</button>
+    <div id="auth-err"></div>
   </div>
 </div>
 
@@ -407,41 +407,89 @@ select:focus,input[type=date]:focus{outline:none;border-color:#e11c47}
 const $ = id => document.getElementById(id);
 
 // ============================================================
-// CONFIGURATION — paste the deployed /exec URL here after deploying script.js
-// Both AS1 and AS2 now point to the same single script.
+// CONFIGURATION: paste the deployed /exec URL here after deploying script.js
 // ============================================================
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzvdzFSv5d29zSfe5ddSiD2i2xEwAnYvZbaju5mvwgZUq_8zx76MlFS6zi5aQg1jltz/exec';
-const AS1 = SCRIPT_URL;
-const AS2 = SCRIPT_URL;
-// Set only after the password screen is passed — its value is the SHA-256
-// hash of the password (see the AUTH block below), sent with every request
-// (read and write) and checked server-side in script.js. Until unlock(), no
-// request carries a valid token, so nothing behind the password screen can
-// be reached even by someone who has this page's raw source.
-let WRITE_TOKEN = null;
-
 // ============================================================ AUTH
-// SHA-256 hash of the password, not the plaintext — anyone who views source
-// doesn't see the password directly. This is not real server-side auth:
-// anyone who knows the password (or brute-forces this hash) can still get
-// in. What it does stop is a random person who finds this URL from ever
-// seeing the tool or being able to call the backend at all — the hash IS
-// the token every request needs, and nothing computes it before login.
-const PW_HASH = 'ce9852646cc9646e24db3ed779c9ff7c70a21cd51b99ea7c729d89bd62e94881';
-async function sha256Hex(text) {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+// The password is checked by the server (script.js), which compares it to a
+// hash it keeps privately in Script Properties. Nothing in this file can be
+// used to get in: there is no hash, token or password here, so reading this
+// page's source gives a stranger nothing to log in with.
+//
+// While you are signed in the password is kept in memory, and in
+// sessionStorage so a page refresh does not sign you out. sessionStorage is
+// cleared when the tab is closed. It is never written to localStorage.
+let AUTH_PW = null;
+
+// Low-level call: sends { ...params, action, password } to the server.
+// Sent as text/plain on purpose: that makes it a "simple" request, so the
+// browser skips the CORS preflight that Apps Script web apps cannot answer.
+// The password travels in the body, never in a URL.
+async function postApi(action, params, password, timeout) {
+  const resp = await fetch(SCRIPT_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ ...params, action, password }),
+    signal: AbortSignal.timeout(timeout || 30000)
+  });
+  if (!resp.ok) throw new Error('HTTP ' + resp.status);
+  return resp.json();
+}
+
+// Every backend call after sign-in goes through here. If the server stops
+// accepting the saved password (it was changed, say), sign out and ask again.
+async function api(action, params = {}, timeout) {
+  const data = await postApi(action, params, AUTH_PW, timeout);
+  if (data && !Array.isArray(data) && data.error === 'Unauthorized') {
+    signOut('Your session ended. Please sign in again. (Code F103 / S101)');
+    throw new Error('Your session ended. Please sign in again. (Code F103 / S101)');
+  }
+  return data;
+}
+
+function showAuthMsg(text) {
+  const el = $('auth-err');
+  el.textContent = text || '';
+  el.style.display = text ? 'block' : 'none';
+}
+function setAuthBusy(busy) {
+  const btn = $('auth-btn');
+  btn.disabled = busy;
+  btn.textContent = busy ? 'Checking…' : 'Enter';
+}
+function saveSession(pw) {
+  try { sessionStorage.setItem('sawph_pw', pw); } catch (e) {}
+}
+function signOut(message) {
+  AUTH_PW = null;
+  try { sessionStorage.removeItem('sawph_pw'); } catch (e) {}
+  $('main-app').style.display = 'none';
+  $('auth-gate').style.display = 'flex';
+  $('auth-pw').value = '';
+  setAuthBusy(false);
+  showAuthMsg(message);
+}
+
+// Asks the server whether the password is right. Returns true and unlocks if so.
+async function attemptLogin(pw, fromLink) {
+  setAuthBusy(true); showAuthMsg('');
+  try {
+    const r = await postApi('login', {}, pw, 30000);
+    if (r && r.success) { AUTH_PW = pw; saveSession(pw); unlock(); return true; }
+    const code = (r && r.code) || 'S199';
+    showAuthMsg(code === 'S101' && fromLink ? 'The password in that link is out of date. Please type the current password. (Code F101 / S101)'
+              : code === 'S101' ? 'Incorrect password. (Code F101 / S101)'
+              : code === 'S102' ? 'The server has no password set up yet. (Code F101 / S102)'
+              : 'Sign-in failed. (Code F101 / ' + code + ')');
+  } catch (e) {
+    showAuthMsg('Could not reach the server. Check your connection and try again. (Code F102)');
+  }
+  setAuthBusy(false);
+  return false;
 }
 async function checkAuthPw() {
-  const typed = $('auth-pw').value;
-  const hash = await sha256Hex(typed);
-  if (hash === PW_HASH) {
-    WRITE_TOKEN = hash;
-    localStorage.setItem('sawph_auth', hash);
-    unlock();
-  } else {
-    $('auth-err').style.display = 'block';
-  }
+  const typed = $('auth-pw').value.trim();
+  if (typed) await attemptLogin(typed);
 }
 function unlock() {
   $('auth-gate').style.display = 'none';
@@ -450,21 +498,22 @@ function unlock() {
 }
 $('auth-pw').addEventListener('keydown', e => { if (e.key === 'Enter') checkAuthPw(); });
 (async () => {
-  const saved = localStorage.getItem('sawph_auth');
-  if (saved && saved === PW_HASH) { WRITE_TOKEN = saved; unlock(); return; }
+  // Clean up the old scheme: it kept a hash in localStorage.
+  try { localStorage.removeItem('sawph_auth'); } catch (e) {}
 
-  // One-click login link: https://.../#the-password — lets you send Jen a
-  // single link with nothing to type. Checked after localStorage so a
-  // bookmarked/old link doesn't re-prompt someone already logged in.
-  const hashFrag = window.location.hash.replace('#', '');
-  if (hashFrag) {
-    const hash = await sha256Hex(decodeURIComponent(hashFrag));
-    if (hash === PW_HASH) {
-      WRITE_TOKEN = hash;
-      localStorage.setItem('sawph_auth', hash);
-      unlock();
-    }
-  }
+  // Already signed in this tab (refresh): reuse the password. If the server
+  // no longer accepts it, the first request signs us out (Code F103).
+  let saved = null;
+  try { saved = sessionStorage.getItem('sawph_pw'); } catch (e) {}
+  if (saved) { AUTH_PW = saved; unlock(); return; }
+
+  // One-click login link: https://.../#the-password lets you send Jen a
+  // single link with nothing to type. The part after # never leaves the
+  // browser, but it IS the password, so only send the link to someone who
+  // should have it.
+  let fragPw = '';
+  try { fragPw = decodeURIComponent(window.location.hash.replace('#', '')).trim(); } catch (e) {}
+  if (fragPw) await attemptLogin(fragPw, true);
 })();
 
 // ============================================================
@@ -479,9 +528,7 @@ async function loadSheet() {
   setDot('spin'); $('sheet-lbl').textContent = 'Loading writer list…';
   setStatus('Loading writer list…'); $('gen-btn').disabled = true;
   try {
-    const resp = await fetch(AS1 + '?token=' + encodeURIComponent(WRITE_TOKEN));
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    const data = await resp.json();
+    const data = await api('getWriters');
     if (!Array.isArray(data)) throw new Error('Unexpected response');
     writers = data.map(w => ({
       name: (w.name || '').replace(/^['\u2018\u2019]/, '').trim(),
@@ -536,9 +583,7 @@ async function generate() {
   setStatus('Querying article database…');
 
   try {
-    const url = AS2 + '?action=preview&from=' + encodeURIComponent(fv) + '&to=' + encodeURIComponent(tv) + '&cat=' + encodeURIComponent(catFilter) + '&digest=' + encodeURIComponent(digest) + '&token=' + encodeURIComponent(WRITE_TOKEN);
-    const resp = await fetch(url, { signal: AbortSignal.timeout(30000) });
-    const data = await resp.json();
+    const data = await api('preview', { from: fv, to: tv, cat: catFilter, digest }, 30000);
     if (!data.success) throw new Error(data.error || 'Unknown error');
 
     lastResults = { fv, tv, catFilter, digest };
@@ -616,9 +661,7 @@ function buildUncatSection(uncatList) {
       saveBtn.textContent = 'Saving…'; saveBtn.disabled = true;
       try {
         // Script 1 updateCategory now updates BOTH Categorized tab AND Articles tab
-        const url = AS1 + '?action=updateCategory&name=' + encodeURIComponent(name) + '&category=' + encodeURIComponent(cat) + '&token=' + encodeURIComponent(WRITE_TOKEN);
-        const resp = await fetch(url);
-        const data = await resp.json();
+        const data = await api('updateCategory', { name, category: cat });
         if (data.success) {
           saveBtn.textContent = '✓ Saved'; saveBtn.className = 'save-cat-btn saved';
           const w = writers.find(x => x.name === name);
@@ -642,9 +685,7 @@ async function createDoc() {
   $('creating-msg').style.display = 'block';
 
   try {
-    const url = AS2 + '?action=createDigest&from=' + encodeURIComponent(fv) + '&to=' + encodeURIComponent(tv) + '&cat=' + encodeURIComponent(catFilter) + '&digest=' + encodeURIComponent(digest || '') + '&overrides=' + encodeURIComponent(JSON.stringify(multicatOverrides)) + '&token=' + encodeURIComponent(WRITE_TOKEN);
-    const resp = await fetch(url, { signal: AbortSignal.timeout(120000) });
-    const data = await resp.json();
+    const data = await api('createDigest', { from: fv, to: tv, cat: catFilter, digest: digest || '', overrides: multicatOverrides }, 120000);
     $('creating-msg').style.display = 'none';
     if (data.success) {
       lastDigestHtml = data.html || '';
@@ -738,15 +779,10 @@ async function saveWriterModal() {
   $('writer-modal-status').textContent = 'Saving…'; $('writer-modal-status').className = 'status';
 
   try {
-    let url;
-    if (writerModalMode === 'add') {
-      url = AS1 + '?action=addWriter&name=' + encodeURIComponent(name) + '&link=' + encodeURIComponent(link) + '&category=' + encodeURIComponent(category) + '&cat2=' + encodeURIComponent(cat2) + '&cat3=' + encodeURIComponent(cat3) + '&feeds=' + encodeURIComponent(feeds) + '&token=' + encodeURIComponent(WRITE_TOKEN);
-    } else {
-      const originalName = $('writer-modal-select').value;
-      url = AS1 + '?action=updateWriter&originalName=' + encodeURIComponent(originalName) + '&name=' + encodeURIComponent(name) + '&link=' + encodeURIComponent(link) + '&category=' + encodeURIComponent(category) + '&cat2=' + encodeURIComponent(cat2) + '&cat3=' + encodeURIComponent(cat3) + '&feeds=' + encodeURIComponent(feeds) + '&token=' + encodeURIComponent(WRITE_TOKEN);
-    }
-    const resp = await fetch(url);
-    const data = await resp.json();
+    const fields = { name, link, category, cat2, cat3, feeds };
+    const data = writerModalMode === 'add'
+      ? await api('addWriter', fields)
+      : await api('updateWriter', { ...fields, originalName: $('writer-modal-select').value });
     if (data.success) {
       $('writer-modal-status').textContent = '✓ Saved'; $('writer-modal-status').className = 'status ok';
       await loadSheet();
@@ -813,9 +849,7 @@ async function saveBulkModal() {
     const e = entries[i];
     $('bulk-modal-status').textContent = `Saving ${i + 1}/${entries.length}…`; $('bulk-modal-status').className = 'status';
     try {
-      const url = AS1 + '?action=addWriter&name=' + encodeURIComponent(e.name) + '&link=' + encodeURIComponent(e.link) + '&category=' + encodeURIComponent(e.category) + '&cat2=' + encodeURIComponent(e.cat2) + '&cat3=' + encodeURIComponent(e.cat3) + '&feeds=' + encodeURIComponent(e.feeds) + '&token=' + encodeURIComponent(WRITE_TOKEN);
-      const resp = await fetch(url);
-      const data = await resp.json();
+      const data = await api('addWriter', { name: e.name, link: e.link, category: e.category, cat2: e.cat2, cat3: e.cat3, feeds: e.feeds });
       if (data.success) ok++; else failed.push(e.name + ': ' + (data.error || 'unknown error'));
     } catch (err) {
       failed.push(e.name + ': ' + err.message);
@@ -843,15 +877,13 @@ $('d-from').max = maxDate;
 $('d-to').max = maxDate;
 $('d-to').value = maxDate;
 $('d-from').value = twoWeeksAgo.toISOString().split('T')[0];
-// Runs only after the password screen is passed — see the AUTH block above,
-// which calls this from unlock(). Nothing here fires on page load anymore,
-// so no data request happens (and no token exists to make one succeed)
-// until the password check has already passed.
+// Runs only after the password screen is passed (see the AUTH block above,
+// which calls this from unlock()). Nothing here fires on page load, so no
+// data request is made until a password has been entered.
 async function initApp() {
   await loadSheet();
   try {
-    const resp = await fetch(AS1 + '?action=getOrganization&token=' + encodeURIComponent(WRITE_TOKEN), { signal: AbortSignal.timeout(20000) });
-    const data = await resp.json();
+    const data = await api('getOrganization', {}, 20000);
     if (data.success) {
       orgDigests = data.digests || {};
       ensureUncatBucket();
@@ -982,9 +1014,7 @@ async function saveOrphanAssignments() {
   let renamedCount = 0;
   for (const { cat, newName } of renameJobs) {
     try {
-      const url = AS1 + '?action=renameCategory&oldName=' + encodeURIComponent(cat) + '&newName=' + encodeURIComponent(newName) + '&token=' + encodeURIComponent(WRITE_TOKEN);
-      const resp = await fetch(url, { signal: AbortSignal.timeout(30000) });
-      const data = await resp.json();
+      const data = await api('renameCategory', { oldName: cat, newName }, 30000);
       if (data.success) renamedCount++;
     } catch (e) {}
   }
@@ -996,8 +1026,7 @@ async function saveOrphanAssignments() {
     // pull fresh state instead of overwriting it with our stale local copy.
     await loadSheet();
     try {
-      const resp = await fetch(AS1 + '?action=getOrganization&token=' + encodeURIComponent(WRITE_TOKEN), { signal: AbortSignal.timeout(20000) });
-      const data = await resp.json();
+      const data = await api('getOrganization', {}, 20000);
       if (data.success) { orgDigests = data.digests || {}; ensureUncatBucket(); populateDigestDropdown(); }
     } catch (e) {}
   }
@@ -1053,8 +1082,7 @@ function populateDigestDropdown() {
 async function loadOrganization() {
   $('org-status').textContent = 'Loading…'; $('org-status').className = 'status';
   try {
-    const resp = await fetch(AS1 + '?action=getOrganization&token=' + encodeURIComponent(WRITE_TOKEN), { signal: AbortSignal.timeout(20000) });
-    const data = await resp.json();
+    const data = await api('getOrganization', {}, 20000);
     if (!data.success) throw new Error(data.error || 'Unknown error');
     orgDigests = data.digests || {};
     ensureUncatBucket();
@@ -1193,9 +1221,7 @@ function addOrgCategory() {
 async function saveOrganization() {
   $('org-status').textContent = 'Saving…'; $('org-status').className = 'status';
   try {
-    const url = AS1 + '?action=saveOrganization&digests=' + encodeURIComponent(JSON.stringify(orgDigests)) + '&token=' + encodeURIComponent(WRITE_TOKEN);
-    const resp = await fetch(url, { signal: AbortSignal.timeout(20000) });
-    const data = await resp.json();
+    const data = await api('saveOrganization', { digests: orgDigests }, 20000);
     if (!data.success) throw new Error(data.error || 'Unknown error');
     $('org-status').textContent = '✓ Saved';
     $('org-status').className = 'status ok';
