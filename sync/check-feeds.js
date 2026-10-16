@@ -1,14 +1,29 @@
 // Checks the last post date for every writer that has feeds in the sheet.
 // Stores the result in the "Last Post" column.
 //
-// Run: node check-feeds.js
+// Run: PUBHUB_PASSWORD="the-login-password" node check-feeds.js
 
 import Parser from 'rss-parser';
 
 const AS1_URL = 'https://script.google.com/macros/s/AKfycbzvdzFSv5d29zSfe5ddSiD2i2xEwAnYvZbaju5mvwgZUq_8zx76MlFS6zi5aQg1jltz/exec';
-// Must match WRITE_TOKEN in script.js exactly (the SHA-256 hash of the
-// index.html login password).
-const WRITE_TOKEN = 'ce9852646cc9646e24db3ed779c9ff7c70a21cd51b99ea7c729d89bd62e94881';
+// The login password comes from an environment variable so it is never
+// written into this file (the repo is public). It is sent in the request
+// body, never in the URL.
+const PASSWORD = process.env.PUBHUB_PASSWORD;
+if (!PASSWORD) {
+  console.error('Missing PUBHUB_PASSWORD. Run as:');
+  console.error('  PUBHUB_PASSWORD="the-login-password" node check-feeds.js');
+  process.exit(1);
+}
+async function callApi(body) {
+  const resp = await fetch(AS1_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...body, password: PASSWORD }),
+    redirect: 'follow'
+  });
+  return resp.json();
+}
 const CONCURRENCY = 10;
 const FEED_TIMEOUT_MS = 10000;
 
@@ -50,8 +65,7 @@ async function runInBatches(items, size, fn) {
 
 async function main() {
   console.log('Loading writers from sheet…');
-  const resp = await fetch(AS1_URL + '?token=' + WRITE_TOKEN);
-  const writers = await resp.json();
+  const writers = await callApi({ action: 'getWriters' });
   if (!Array.isArray(writers)) throw new Error('Bad response: ' + JSON.stringify(writers));
 
   const withFeeds = writers.filter(w => w.feeds && w.feeds.trim());
@@ -76,13 +90,7 @@ async function main() {
   // Send in chunks of 100 to avoid payload limits
   for (let i = 0; i < updates.length; i += 100) {
     const chunk = updates.slice(i, i + 100);
-    const postResp = await fetch(AS1_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ updates: chunk, token: WRITE_TOKEN }),
-      redirect: 'follow'
-    });
-    const r = await postResp.json();
+    const r = await callApi({ updates: chunk });
     if (r.error) console.warn('Save warning:', r.error);
     else console.log(`  Saved rows ${i + 1}–${i + chunk.length} (${r.updated} written)`);
   }

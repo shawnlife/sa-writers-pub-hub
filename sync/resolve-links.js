@@ -3,12 +3,27 @@
 // feed URLs and stores them in the Feeds column of the Writers sheet.
 //
 // Usage:
-//   SUBSTACK_TOKEN="your-connect-sid-value" node resolve-links.js
+//   PUBHUB_PASSWORD="the-login-password" SUBSTACK_TOKEN="your-connect-sid-value" node resolve-links.js
 
 const AS1_URL = 'https://script.google.com/macros/s/AKfycbzvdzFSv5d29zSfe5ddSiD2i2xEwAnYvZbaju5mvwgZUq_8zx76MlFS6zi5aQg1jltz/exec';
-// Must match WRITE_TOKEN in script.js exactly (the SHA-256 hash of the
-// index.html login password).
-const WRITE_TOKEN = 'ce9852646cc9646e24db3ed779c9ff7c70a21cd51b99ea7c729d89bd62e94881';
+// The login password comes from an environment variable so it is never
+// written into this file (the repo is public). It is sent in the request
+// body, never in the URL.
+const PASSWORD = process.env.PUBHUB_PASSWORD;
+if (!PASSWORD) {
+  console.error('Missing PUBHUB_PASSWORD. Run as:');
+  console.error('  PUBHUB_PASSWORD="the-login-password" node resolve-links.js');
+  process.exit(1);
+}
+async function callApi(body) {
+  const resp = await fetch(AS1_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...body, password: PASSWORD }),
+    redirect: 'follow'
+  });
+  return resp.json();
+}
 const DELAY_MS = 1200;
 
 async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -72,8 +87,7 @@ async function main() {
   }
 
   console.log('Loading writers from sheet…');
-  const resp = await fetch(AS1_URL + '?token=' + WRITE_TOKEN);
-  const writers = await resp.json();
+  const writers = await callApi({ action: 'getWriters' });
   if (!Array.isArray(writers)) throw new Error('Bad response: ' + JSON.stringify(writers));
 
   const toResolve = writers.filter(w => w.link && w.link.includes('open.substack.com/users/'));
@@ -105,13 +119,7 @@ async function main() {
     if (updates.length > 0 && (updates.length % 50 === 0 || i === toResolve.length - 1)) {
       process.stdout.write(`\n  Saving ${updates.length} updates to sheet…`);
       try {
-        const postResp = await fetch(AS1_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ updates, token: WRITE_TOKEN }),
-          redirect: 'follow'
-        });
-        const r = await postResp.json();
+        const r = await callApi({ updates });
         console.log(` ✓ (${r.updated} written)\n`);
       } catch (err) {
         console.log(` ✗ save failed: ${err.message}\n`);

@@ -19,17 +19,11 @@ const ORG_SHEET_LEGACY_NAME = 'Organization'; // pre-rename tab name — auto-mi
 const DIGEST_DOC_ID  = '1c865BZua0CQ1WkOCvoIgjLbn9Gx7MqrMQ_G4Kpm3mp4';
 const DAYS_TO_KEEP   = 90;
 
-// Shared secret checked on every request, read or write. This is the SHA-256
-// hash of the password shown on index.html's login screen — the frontend
-// only ever computes and sends this hash after the password is entered
-// correctly, so nothing here works until that screen is passed. The URL for
-// this web app is still visible in index.html's public source (served via
-// GitHub Pages) so this isn't real server-side auth, but combined with the
-// password screen, a random visitor can no longer read or write anything —
-// they'd have to find the URL AND either know the password or reverse the
-// hash. Must match PW_HASH in index.html and the token in sync/*.js exactly,
-// including if it's ever rotated.
-const WRITE_TOKEN = 'ce9852646cc9646e24db3ed779c9ff7c70a21cd51b99ea7c729d89bd62e94881';
+// The login password is NOT stored in this file or in index.html, because
+// both are public on GitHub. Only its SHA-256 hash is kept, in Script
+// Properties (Project Settings > Script Properties) under the name PW_HASH.
+// Create or change it with setPassword() further down. If PW_HASH is missing,
+// every protected request is refused, so a half-finished setup fails closed.
 
 const NAME_COLOR    = '#e11c47';
 const ARTICLE_COLOR = '#000000';
@@ -132,30 +126,98 @@ const CATEGORY_IMAGES = {
 
 // ─── HTTP entry points ─────────────────────────────────────────────────────────
 
+// ─── Password check ────────────────────────────────────────────────────────────
+
+function sha256Hex_(text) {
+  return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, text, Utilities.Charset.UTF_8)
+    .map(b => (b < 0 ? b + 256 : b).toString(16).padStart(2, '0'))
+    .join('');
+}
+
+// Compares two strings without stopping at the first difference.
+function safeEqual_(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+// Returns null when the password is accepted, otherwise the reply to send back.
+// The codes are the "S" half of the error codes shown on the login screen
+// (see the error code list in HANDOFF.md).
+function authError_(password) {
+  const stored = PropertiesService.getScriptProperties().getProperty('PW_HASH');
+  if (!stored) return respond({ error: 'Server password not set up', code: 'S102' });
+  const typed = typeof password === 'string' ? password.trim() : '';
+  if (!typed || !safeEqual_(sha256Hex_(typed), stored)) {
+    return respond({ error: 'Unauthorized', code: 'S101' });
+  }
+  return null;
+}
+
+// SET OR CHANGE THE PASSWORD (run from the Apps Script editor, not the web):
+//   1. Project Settings (gear icon) > Script Properties > Add script property.
+//      Name: NEW_PASSWORD    Value: the password you want (12+ characters).
+//   2. Choose setPassword in the function dropdown and press Run.
+// Only the hash is kept (as PW_HASH). NEW_PASSWORD is deleted straight after,
+// so the password itself is not left sitting in the project.
+function setPassword() {
+  const props = PropertiesService.getScriptProperties();
+  const pw = (props.getProperty('NEW_PASSWORD') || '').trim();
+  if (!pw) throw new Error('No NEW_PASSWORD script property found. Add it under Project Settings > Script Properties, then run setPassword again.');
+  if (pw.length < 12) throw new Error('NEW_PASSWORD is too short. Use at least 12 characters, for example a few random words.');
+  props.setProperty('PW_HASH', sha256Hex_(pw));
+  props.deleteProperty('NEW_PASSWORD');
+  console.log('Password saved. NEW_PASSWORD has been removed.');
+}
+
+// ─── Routing ───────────────────────────────────────────────────────────────────
+
+// GET is only for the one public read. Everything else must be a POST with the
+// password in the request body, because a password in a URL ends up in logs.
 function doGet(e) {
   const p = (e && e.parameter) || {};
-  const action = p.action || '';
 
-  // The ONE deliberate exception to "every request needs the token": a
+  // The ONE deliberate exception to "every request needs the password": a
   // headline-numbers-only read for the Vibe Dashboard (writer count + most
   // recent post date, no names/links/categories).
-  if (action === 'publicStats') return getPublicStats();
+  if (p.action === 'publicStats') return getPublicStats();
 
-  // Every other request, read or write, requires the token now that the
-  // frontend sits behind a password screen. Nothing else is exempted: not
-  // the default writer list, not preview, not the legacy RSS proxy.
-  if (p.token !== WRITE_TOKEN) {
-    return respond({ error: 'Unauthorized' });
+  return respond({ error: 'Unauthorized', code: 'S101' });
+}
+
+// Body is JSON: { password, action, ...params }. The browser sends it as
+// text/plain so it counts as a "simple" request (Apps Script web apps cannot
+// answer the CORS preflight that application/json would trigger).
+// The local sync scripts also send { password, updates: [...] } with no action.
+function doPost(e) {
+  let body;
+  try {
+    body = JSON.parse(e.postData.contents);
+  } catch (err) {
+    return respond({ error: 'Bad request', code: 'S103' });
   }
+  const denied = authError_(body && body.password);
+  if (denied) return denied;
 
-  // RSS proxy (legacy — keeps old URL?= calls working)
-  if (p.url) return fetchRSS(p.url);
+  try {
+    if (!body.action && Array.isArray(body.updates)) return bulkUpdateWriters_(body.updates);
+    return route_(body.action, body);
+  } catch (err) {
+    return respond({ error: err.message });
+  }
+}
+
+// Runs only after the password has been accepted.
+function route_(action, p) {
+  if (action === 'login') return respond({ success: true });
 
   // Digest actions
   if (action === 'preview')       return respond(previewDigest(p.from, p.to, p.cat || '__all__', p.digest || ''));
-  if (action === 'createDigest')  return respond(buildAndWriteDigest(p.from, p.to, p.cat || '__all__', p.digest || '', p.overrides ? JSON.parse(p.overrides) : {}));
+  if (action === 'createDigest')  return respond(buildAndWriteDigest(p.from, p.to, p.cat || '__all__', p.digest || '', typeof p.overrides === 'string' ? JSON.parse(p.overrides) : (p.overrides || {})));
 
   // Writer actions
+  if (action === 'getWriters')     return getWriters();
   if (action === 'updateCategory') return updateCategory(p.name, p.category);
   if (action === 'addWriter')      return addWriter(p.name, p.link, p.category, p.cat2, p.cat3, p.feeds);
   if (action === 'updateWriter')   return updateWriter(p.originalName, p.name, p.link, p.category, p.cat2, p.cat3, p.feeds);
@@ -165,20 +227,16 @@ function doGet(e) {
 
   // Organization (digest structure) actions
   if (action === 'getOrganization')  return getOrganization();
-  if (action === 'saveOrganization') return saveOrganization(p.digests);
+  if (action === 'saveOrganization') return saveOrganization(typeof p.digests === 'string' ? p.digests : JSON.stringify(p.digests || {}));
 
-  // Default: return full writer list
-  return getWriters();
+  return respond({ error: 'Unknown action: ' + action });
 }
 
 // Called by resolve-links.js (run locally) and check-feeds.js to update writer fields.
 // Also handles bulk lastPost updates from check-feeds.js.
 // Payload: { updates: [ { name, link?, feeds?, lastPost? } ] }
-function doPost(e) {
+function bulkUpdateWriters_(updates) {
   try {
-    const payload = JSON.parse(e.postData.contents);
-    if (payload.token !== WRITE_TOKEN) return respond({ error: 'Unauthorized' });
-    const updates = payload.updates || [];
     if (!updates.length) return respond({ success: true, updated: 0 });
 
     const ss = SpreadsheetApp.getActiveSpreadsheet();

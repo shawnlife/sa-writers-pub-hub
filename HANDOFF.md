@@ -4,6 +4,35 @@
 
 A web-based tool built for **Jen Thorpe** to automate the generation of her weekly *South African Writers' Pub Hub* digest on Substack. Previously Jen manually checked ~400 Substack writers' pages. This tool automates that entirely.
 
+> Note: the "Script Roles" and "Sheet Structure" sections further down describe an older layout (three separate scripts, a `Categorized` tab). Today everything runs from one consolidated `script.js`, and the tabs are `Writers`, `Articles` and `Categories`. The section right below is current.
+
+---
+
+## Login password and error codes (current as of 16 Oct 2026)
+
+**How login works.** The tool sits behind a password screen, and the server (the Apps Script in `script.js`) is what checks the password. `index.html` is public on GitHub Pages, and so is this repo, so neither contains a password, a hash or a token; reading the page source gives a stranger nothing to log in with. Only a hash of the password is stored, privately, in the Apps Script's Script Properties under the name `PW_HASH`. The browser sends the password in the body of each request (never in a URL). If `PW_HASH` is missing, every request is refused.
+
+The one thing that needs no password is `?action=publicStats`, which returns only the writer count and the most recent post date. The Vibe Dashboard uses it.
+
+**Set or change the password** (done in the Apps Script editor, not in code):
+1. Project Settings (gear icon) > Script Properties > Add script property. Name: `NEW_PASSWORD`. Value: the new password, 12 or more characters (a few random words works well).
+2. Pick `setPassword` in the function dropdown and press Run. The log should say "Password saved".
+3. That is all. The password is read live, so no new deployment is needed. Anyone signed in is signed out (Code F103) and signs in with the new one.
+4. Tell Jen. Her one-click link is `https://shawnlife.github.io/sa-writers-pub-hub/#the-password` (the part after `#` never leaves her browser, but it is the password, so send it privately).
+
+The local scripts in `sync/` (`check-feeds.js`, `resolve-links.js`) read the password from an environment variable: `PUBHUB_PASSWORD="the-password" node check-feeds.js`.
+
+**Error codes.** Shown on screen as "(Code F101 / S101)": the first part is what the person saw, the second is the server's reason. F = the page, S = the server. Codes are never reused or renumbered.
+
+| Code | Meaning | What to do | Severity |
+|---|---|---|---|
+| F101 / S101 | Incorrect password | Retype it. If it keeps failing for Jen, the password may have been changed, so give her the current one. | fixes itself |
+| F101 / S102 | The server has no password set up yet | Run `setPassword` (steps above). | act |
+| F101 / S199 | Sign-in got a reply the page did not recognise | Retry once; if it repeats, check the Apps Script deployment is the latest version. | keep an eye |
+| F102 | Could not reach the server (offline, or Google slow) | Check the connection and try again. | fixes itself |
+| F103 / S101 | Signed out because the server stopped accepting the saved password | Sign in again with the current password. | fixes itself |
+| S103 | The request was not valid JSON | Only seen when calling the API by hand; fix the request. | keep an eye |
+
 ---
 
 ## What's Been Built
